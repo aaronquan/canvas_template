@@ -1,35 +1,78 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
+import { useState, useEffect, useRef } from 'react'
+//import reactLogo from './assets/react.svg'
+//import viteLogo from '/vite.svg'
 import './App.css'
+import { CanvasApp, WindowSize } from './Canvas/Canvas'
+import { InputChanges, MouseState } from './input/mouse';
+import { useMouseMove, useMousePosition, useMouseRefPosition } from './hooks/Mouse';
+import { Point } from './geometry/geometry';
+import { AnimTime } from './time/time';
+import { GameGrid } from './game/game';
+import { useKeys } from './input/keys';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const game = useRef<GameGrid>();
+  //const [context, setContext] = useState<CanvasRenderingContext2D>();
+  const contextRef = useRef<CanvasRenderingContext2D>();
+  const mouse = useRef<MouseState>(new MouseState());
+  useKeys(handleKeyDown);
 
+  const windowSize = useRef<WindowSize>();
+  //const rawMouse = useMousePosition();
+
+  useEffect(() => {
+    game.current = new GameGrid();
+    //mouse.current = new MouseState();
+  }, []);
+  /*
+  useEffect(() => {
+    if(context){
+      
+    }
+    //if(contextRef.current) drawPicture(contextRef.current);
+  }, [context, contextRef]);*/
+  
+  function handleResize(size:WindowSize){
+    windowSize.current = size;
+    //contextRef.current?.clearRect(0, 0, size.width, size.height);
+    //if(contextRef.current) drawPicture(contextRef.current);
+  }
+  function animationStep(cr:CanvasRenderingContext2D, time: number, inputChanges: InputChanges, animTime:AnimTime){
+    if(windowSize.current) cr.clearRect(0, 0, windowSize.current.width, windowSize.current.height);
+    if(game.current){
+      game.current.draw(cr);
+      //drawCursor(cr);
+      //console.log(rawMouse);
+      game.current.update(animTime.frameTime);
+    }
+  }
+  function handleMouseMove(e:React.MouseEvent<HTMLCanvasElement>, 
+    canvas:HTMLCanvasElement):void{
+      if(game.current && mouse.current) game.current.mouseMove(e, mouse.current.position);
+  }
+  function handleKeyDown(e:KeyboardEvent){
+    if(game.current) game.current.keyDown(e, e.key);
+  }
+  function handleInitCanvas(cr:CanvasRenderingContext2D){
+    contextRef.current = cr;
+  }
   return (
     <>
-      <div>
-        <a href="https://vitejs.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
+      {/*<Cursor mouse={rawMouse}/>*/}
+      <CanvasApp onInit={handleInitCanvas} onResize={handleResize} fullScreen
+      hideMouse={true} onMouseMove={handleMouseMove}
+      animationStep={animationStep} mouseState={mouse.current}/>
     </>
   )
 }
 
-export default App
+function Cursor(props:{mouse:Point}){
+  return <div style={{
+    cursor: 'none',
+    position:'fixed', 
+    backgroundColor: 'red', top:props.mouse.y,
+    left: props.mouse.x, width: '20px', height: '20px'
+  }}/>
+}
+
+export default App;

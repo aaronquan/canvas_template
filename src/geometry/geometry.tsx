@@ -1,3 +1,16 @@
+
+export const Region = Object.freeze({
+    inside: Symbol('inside'),
+    left: Symbol('left'),
+    left_top: Symbol('top_left'),
+    top: Symbol('top'),
+    right_top: Symbol('right_top'),
+    right: Symbol('right'),
+    right_bottom: Symbol('right_bottom'),
+    bottom: Symbol('bottom'),
+    left_bottom: Symbol('left_bottom')
+});
+
 export class Point{
     x: number;
     y: number;

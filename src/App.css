@@ -1,8 +1,12 @@
-#root {
+#root-old {
   max-width: 1280px;
   margin: 0 auto;
   padding: 2rem;
   text-align: center;
+}
+
+#root {
+  overflow: hidden;
 }
 
 .logo {
@@ -39,4 +43,9 @@
 
 .read-the-docs {
   color: #888;
+}
+
+.GameCanvas {
+  cursor: url(assets/cursor.png),
+  auto;
 }

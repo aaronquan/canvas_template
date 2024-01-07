@@ -29,7 +29,6 @@ export function useAnim(cr:CanvasRenderingContext2D | null,
                         mouseScroll: scrolls
                     }
                     mouseState.current.matchState(rawMouseState);
-                    //mouseState.current.scroll = rawMouseState.scroll;
                 }
                 animationStep(cr, time, inputChanges, animTime.current);
             }

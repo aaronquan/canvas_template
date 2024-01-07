@@ -12,6 +12,7 @@ export class MouseState{
     rightDown:boolean;
     scroll:number;
     constructor(){
+        //console.log("inint mouse")
         this.position = new Point();
         this.leftDown = false;
         this.rightDown = false;
