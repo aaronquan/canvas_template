@@ -21,16 +21,22 @@ function App() {
   //const rawMouse = useMousePosition();
 
   useEffect(() => {
-    game.current = new GameGrid();
-    //mouse.current = new MouseState();
+      game.current = new GameGrid();
+      //mouse.current = new MouseState();
   }, []);
-  /*
+
   useEffect(() => {
-    if(context){
-      
+    if(contextRef.current){
+      const cr = contextRef.current;
+      const img = new Image();
+      img.src = '/src/assets/react.svg';
+      img.onload = () => {
+        console.log('loaded')
+        const pattern = cr.createPattern(img, 'repeat');
+        if(game.current) game.current.testTexture = pattern;
+      }
     }
-    //if(contextRef.current) drawPicture(contextRef.current);
-  }, [context, contextRef]);*/
+  }, [contextRef]);
   
   function handleResize(size:WindowSize){
     windowSize.current = size;

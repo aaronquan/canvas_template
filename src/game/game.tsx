@@ -2,109 +2,19 @@ import { Point } from "../geometry/geometry";
 import { Coordinate2DType, DrawGrid2D, VirtualGrid2D } from "../geometry/grid";
 import { VirtRect } from "../geometry/shapes";
 
-class BlockElement implements Coordinate2DType{
-    x: number;
-    y: number;
-    isSolid: boolean;
-    //isDropping: boolean;
-    constructor(x?:number, y?:number){
-        this.x = x ? x : 0;
-        this.y = y ? y : 0;
-        this.isSolid = false;
-    }
-    newCoordinates(x:number, y:number){
-        this.x = x;
-        this.y = y;
-    }
-    update(_grid:DrawGrid2D<BlockElement>){
-    }
-    draw(cr:CanvasRenderingContext2D):void{
-        cr.fillRect(0, 0, 1, 1);
-    }
-}
+import ReactLogo from './../assets/react.svg';
+import { BlockInfo } from "./interface";
 
-//blocks that drop (user can control)
-class DroppingBlock extends BlockElement{
-    isDropping: boolean; 
-    constructor(x?:number, y?:number){
-        super(x, y);
-        this.isDropping = true;
-    }
-    move(grid:DrawGrid2D<BlockElement>, x:number, y:number=0){
-        const nx = this.x+x;
-        const ny = this.y+y;
-        if(grid.isInGrid(nx, ny)){
-            const examineBlock = grid.getItem(nx, ny);
-            if(!examineBlock.isSolid){
-                grid.swapGrid(this.x, 
-                    this.y, nx, ny);
-            }
-        }
-    }
-    update(grid:DrawGrid2D<BlockElement>){
-        if(this.isDropping){
-            const yd1 = this.y + 1;
-            if(grid.isInGrid(this.x, yd1)){
-                //dropping
-                const underBlock = grid.getItem(this.x, yd1);
-                if(!underBlock.isSolid){
-                    grid.swapGrid(this.x, this.y, this.x, yd1);
-                }else{
-                    this.isDropping = false;
-                }
-            }else{
-                this.isDropping = false;
-            }
-        }
-    }
-}
+import { BlockElement, SolidBlock } from "./blocks";
+import { RandomBlockDropper } from "./blockchain";
 
-export class SolidBlock extends DroppingBlock{
-    isFalling: boolean;
-    constructor(x?:number, y?:number){
-        super(x, y);
-        this.isSolid = true;
-        this.isFalling = true; 
-    }
-    update(grid:DrawGrid2D<BlockElement>){
-        super.update(grid);
-        /*
-        if(this.isFalling){
-            const yd1 = this.y + 1;
-            if(grid.isInGrid(this.x, yd1)){
-                //falling
-                const underBlock = grid.getItem(this.x, yd1);
-                if(!underBlock.isSolid){
-                    grid.swapGrid(this.x, this.y, this.x, yd1);
-                }else{
-                    this.isFalling = false;
-                }
-            }else{
-                this.isFalling = false;
-        }*/
-    }
-    draw(cr:CanvasRenderingContext2D):void{
-        cr.fillStyle = 'blue';
-        cr.fillRect(0, 0, 1, 1);
-    }
-}
-
-//focus block and has other blocks around
-//allows rotation
-class DroppingBlockChain extends DroppingBlock{
-    chain: BlockElement[];
-    constructor(x?:number, y?:number){
-        super(x, y);
-        this.chain = [];
-    }
-}
-
+const svg = document.createElementNS(ReactLogo, 'svg');
 
 export class GameGrid{
     grid: DrawGrid2D<BlockElement>;
     gridPositions: VirtualGrid2D<Point>;
 
-    solidBlocks: SolidBlock[];
+    solidBlocks: BlockElement[];
 
     controlledBlock: SolidBlock | null;
 
@@ -115,7 +25,11 @@ export class GameGrid{
     blockSpawnEvent: TimedEvent;
     blockTickEvent: TimedEvent;
 
-    blockInfo: null; // todo next?
+    blockInfo: BlockInfo | null; // todo complete after coding 
+
+    testTexture: CanvasPattern | null;
+
+    blockDropper: RandomBlockDropper;
 
     constructor(){
         console.log('init game');
@@ -126,12 +40,16 @@ export class GameGrid{
         this.controlledBlock = null;
 
         this.mouseHighlightedCell = null;
-        this.blockSpawnEvent = new TimedEvent(2000);
-        this.blockTickEvent = new TimedEvent(400);
+        this.blockSpawnEvent = new TimedEvent(1000);
+        this.blockTickEvent = new TimedEvent(32);
 
         this.testRect = null;
 
-        this.blockInfo = null;
+        this.blockInfo = new BlockInfo(new Point(500, 400));
+
+        this.testTexture = null;
+
+        this.blockDropper = new RandomBlockDropper();
     }
     update(time:number){
         const blockTicks = this.blockTickEvent.step(time);
@@ -147,9 +65,18 @@ export class GameGrid{
             const newBlock = this.addNewBlock(rand, 0);
             if(newBlock && !this.controlledBlock){
                 this.controlledBlock = newBlock;
+                //console.log(this.controlledBlock);
+            }
+            if(!newBlock){
+                console.log('you lost block cannot be placed');
             }
         }
-
+        if(this.mouseHighlightedCell){
+            const mouseBlock = this.grid.getItem(this.mouseHighlightedCell.x, this.mouseHighlightedCell.y);
+            this.blockInfo?.parseInfo(mouseBlock);
+        }else{
+            this.blockInfo?.noInfo();
+        }
     }
     getFurthestEdge(pt:Point){
         /*
@@ -210,9 +137,13 @@ export class GameGrid{
         this.blockMove(1);
     }
     addNewBlock(x:number, y:number):SolidBlock | null{
-        //console.log(this.grid.getItem(x, y));
+        
         if(!this.grid.getItem(x, y).isSolid){
-            const newSolid = new SolidBlock(x, y);
+            //aconst newSolid = this.blockDropper.sedimentBlock(); 
+            // drops sediment only
+            const newSolid = this.blockDropper.randomBlock();
+            //const newSolid = new SolidBlock(x, y);
+            //newSolid.newCoordinates();
             this.grid.setGrid(x, y, newSolid);
             this.solidBlocks.push(newSolid);
             //console.log('add block');
@@ -237,16 +168,16 @@ export class GameGrid{
         //draw blocks
         for(const block of this.solidBlocks){
             const position = this.gridPositions.getItem(block.x, block.y);
-            cr.translate(position.x, position.y);
-            cr.scale(this.grid.gridSize, this.grid.gridSize);
-            block.draw(cr);
-            cr.resetTransform();
+            //cr.translate(position.x, position.y);
+            //cr.scale(this.grid.gridSize, this.grid.gridSize);
+            block.draw(cr, this.grid.gridSize, position);
+            //cr.resetTransform();
         }
         if(this.controlledBlock){
             const position = this.gridPositions.getItem(this.controlledBlock.x, this.controlledBlock.y);
             cr.strokeStyle = 'green';
             cr.strokeRect(position.x, position.y, this.grid.gridSize, this.grid.gridSize);
-            cr.resetTransform();
+            //cr.resetTransform();
         }
 
         if(this.mouseHighlightedCell){
@@ -258,11 +189,22 @@ export class GameGrid{
             //console.log(block);
             //block.draw(cr);
             cr.fillRect(position.x, position.y, this.grid.gridSize, this.grid.gridSize);
-            cr.resetTransform();
+            //cr.resetTransform();
         }
         if(this.testRect){
             this.testRect.draw(cr);
         }
+
+        if(this.blockInfo) this.blockInfo.draw(cr);
+        /*
+        if(this.testTexture){
+            //textures also scale
+            cr.scale(2,2);
+            cr.fillStyle = this.testTexture;
+            cr.fillRect(0, 0, 500, 500);
+            cr.resetTransform();
+        }
+        */
     }
 }
 
@@ -284,4 +226,6 @@ class TimedEvent{
     }
 }
 
-const colours = {};
+//const colours = {};
+//export { BlockElement };
+

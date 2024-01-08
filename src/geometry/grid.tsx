@@ -1,4 +1,4 @@
-import { SolidBlock } from "../game/game";
+import { SolidBlock } from "../game/blocks";
 import { IntegerRange } from "../math/Ranges";
 import { Point, Vector2D } from "./geometry";
 import { VirtRect, VirtRectPoint } from "./shapes";
@@ -37,6 +37,12 @@ export class VirtualGrid2D<Type>{
                 this.grid[y].push(sv as Type);
             }
         }
+    }
+    isInX(x:number):boolean{
+        return x >= 0 && x < this.width;
+    }
+    isInY(y:number):boolean{
+        return y >= 0 && y < this.height;
     }
     isInGrid(x:number, y:number):boolean{
         return x >= 0 && x < this.width && y >= 0 && y < this.height;
@@ -85,28 +91,6 @@ export class VirtualCoordinateObjectGrid2D<Type extends Coordinate2DType> extend
             }
         }
     }
-    /*
-    getItem(x:number, y:number):Type{
-        return this.grid[y][x];
-    }
-    swapGrid(i:number, j:number, x:number, y:number){
-        const v = this.grid[j][i];
-        this.grid[y][x] = this.grid[j][i];
-        this.grid[j][i] = v;
-    }
-    setGrid(x:number, y:number, v:Type){
-        if(x < this.width && y < this.height){
-            this.grid[y][x] = v;
-        }
-    }
-    setFullGrid(v:Coordinate2DType){
-        for (let i = 0; i < this.height; i++){
-            this.grid[i] = Array(this.width).fill(v);
-        }
-    }
-    getWidthRange():IntegerRange{
-        return new IntegerRange(0, this.width-1);
-    }*/
 }
 
 export class DrawGrid2D<Type extends Coordinate2DType> extends VirtualCoordinateObjectGrid2D<Type>{
@@ -137,6 +121,10 @@ export class DrawGrid2D<Type extends Coordinate2DType> extends VirtualCoordinate
         this.getItem(i, j).newCoordinates(x, y);
         this.getItem(x, y).newCoordinates(i, j);
         super.swapGrid(i, j, x, y);
+    }
+    setGrid(x: number, y: number, v: Type): void {
+        super.setGrid(x, y, v);
+        v.newCoordinates(x, y);
     }
     getGridPosition(x: number, y: number):Point{
         return new Point(this.position.x+x*this.gridSize, this.position.y+y*this.gridSize);
@@ -174,6 +162,22 @@ export class DrawGrid2D<Type extends Coordinate2DType> extends VirtualCoordinate
         const x = Math.floor((pt.x - this.position.x) / this.gridSize);
         const y = Math.floor((pt.y - this.position.y) / this.gridSize);
         return new Point(x, y);
+    }
+    //array with closest first
+    getLeftItems(x:number, y:number):Type[]{
+        const items = [];
+        for(let i = x-1; i > 0; --i){
+            items.push(this.getItem(i, y));
+        }
+        return items;
+    }
+
+    getRightItems(x:number, y:number):Type[]{
+        const items = [];
+        for(let i = x+1; i < this.width; ++i){
+            items.push(this.getItem(i, y));
+        }
+        return items;
     }
 
     drawBackground(cr:CanvasRenderingContext2D):void{
