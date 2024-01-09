@@ -1,5 +1,8 @@
 import { randomArrayElement } from "../math/Random";
-import { BlockElement, BlockIds, DirtBlock, DroppingBlock, SedimentBlock, StoneBlock, WoodBlock } from "./blocks";
+import { BlockElement, BlockId, DirtBlock, DroppingBlock, 
+    LiquidBlock, SedimentBlock, 
+    StoneBlock, WoodBlock, 
+    generateDroppingBlockFromId } from "./blocks";
 
 //focus block and has other blocks around
 //allows rotation
@@ -12,11 +15,11 @@ class DroppingBlockChain extends DroppingBlock{
 }
 
 const DroppingBlockIds = [
-    BlockIds.StoneBlock,
-    BlockIds.DirtBlock,
-    BlockIds.WoodBlock,
-    BlockIds.SedimentBlock,
-    BlockIds.LiquidBlock
+    BlockId.StoneBlock,
+    BlockId.DirtBlock,
+    BlockId.WoodBlock,
+    BlockId.SedimentBlock,
+    BlockId.LiquidBlock
 ];
 
 export class RandomBlockDropper{
@@ -28,19 +31,24 @@ export class RandomBlockDropper{
     }
     randomBlock():DroppingBlock{
         const blockId = randomArrayElement(DroppingBlockIds);
+        if(blockId) return generateDroppingBlockFromId(blockId);
+        return new StoneBlock();
+        /*
         switch(blockId){
-            case BlockIds.StoneBlock:
+            case BlockId.StoneBlock:
                 return new StoneBlock();
-            case BlockIds.DirtBlock:
+            case BlockId.DirtBlock:
                 return new DirtBlock();
-            case BlockIds.WoodBlock:
+            case BlockId.WoodBlock:
                 return new WoodBlock();
-            case BlockIds.SedimentBlock:
+            case BlockId.SedimentBlock:
                 return new SedimentBlock();
+            case BlockId.LiquidBlock:
+                return new LiquidBlock();
             default:
-                console.log('Random block not found')
-
+                console.log('Block not found')
         }
         return new StoneBlock();
+        */
     }
 }

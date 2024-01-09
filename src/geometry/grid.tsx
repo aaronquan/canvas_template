@@ -1,4 +1,4 @@
-import { SolidBlock } from "../game/blocks";
+import { BlockElement, SolidBlock } from "../game/blocks";
 import { IntegerRange } from "../math/Ranges";
 import { Point, Vector2D } from "./geometry";
 import { VirtRect, VirtRectPoint } from "./shapes";
@@ -6,6 +6,9 @@ import { VirtRect, VirtRectPoint } from "./shapes";
 
 export interface Coordinate2DType{
     newCoordinates:(x:number, y:number) => void;
+    update:(grid:DrawGrid2D<BlockElement>) => void;
+    draw:(cr:CanvasRenderingContext2D, size:number, position?:Point) => void;
+    //isEmpty:() => boolean;
     //default:() => Coordinate2DType;
     //new(...args:any[]): T;
 }
@@ -117,6 +120,9 @@ export class DrawGrid2D<Type extends Coordinate2DType> extends VirtualCoordinate
         this.position = pt;
         this.gridRect.moveTo(pt);
     }
+    getDrawWidth():number{
+       return this.gridSize*this.width; 
+    }
     swapGrid(i:number, j:number, x:number, y:number){
         this.getItem(i, j).newCoordinates(x, y);
         this.getItem(x, y).newCoordinates(i, j);
@@ -129,7 +135,9 @@ export class DrawGrid2D<Type extends Coordinate2DType> extends VirtualCoordinate
     getGridPosition(x: number, y: number):Point{
         return new Point(this.position.x+x*this.gridSize, this.position.y+y*this.gridSize);
     }
-
+    getRow(y:number):Type[]{
+        return this.grid[y];
+    }
     getGridPositionsMap():VirtualGrid2D<Point>{
         const newVirtualGrid = new VirtualGrid2D<Point>(this.width, this.height);
         const posMap:Point[][] = [];
@@ -157,6 +165,7 @@ export class DrawGrid2D<Type extends Coordinate2DType> extends VirtualCoordinate
         const y = Math.floor((pt.y - this.position.y) / this.gridSize);
         return this.getItem(x, y);*/
     }
+
     getGridMouseCoordinates(pt:Point): Point | null{
         if(!this.gridRect.hitPoint(pt)) return null;
         const x = Math.floor((pt.x - this.position.x) / this.gridSize);
@@ -166,7 +175,7 @@ export class DrawGrid2D<Type extends Coordinate2DType> extends VirtualCoordinate
     //array with closest first
     getLeftItems(x:number, y:number):Type[]{
         const items = [];
-        for(let i = x-1; i > 0; --i){
+        for(let i = x-1; i >= 0; --i){
             items.push(this.getItem(i, y));
         }
         return items;
@@ -179,6 +188,15 @@ export class DrawGrid2D<Type extends Coordinate2DType> extends VirtualCoordinate
         }
         return items;
     }
+    /*
+    updateTick(){
+        for(let y = this.height-1; y >= 0; --y){
+            for(let x = 0; x < this.width; ++x){
+                const item = this.getItem(x, y);
+                item.update(this)
+            }
+        }
+    }*/
 
     drawBackground(cr:CanvasRenderingContext2D):void{
         //draw grid area
@@ -217,8 +235,19 @@ export class DrawGrid2D<Type extends Coordinate2DType> extends VirtualCoordinate
         }
     }
 
+    drawBlocks(cr:CanvasRenderingContext2D):void{
+        for(let y = 0; y<this.height; ++y){
+            for(let x = 0; x<this.width; ++x){
+                //console.log(this.getGridPosition(x, y));
+                const item = this.getItem(x, y);
+                item.draw(cr, this.gridSize, this.getGridPosition(x, y));
+            }
+        }
+    }
+
     draw(cr:CanvasRenderingContext2D):void{
         //draw grid area
+        
         const gridWidth = this.width*this.gridSize;
         const gridHeight = this.height*this.gridSize;
         cr.fillStyle = 'black';
@@ -229,22 +258,9 @@ export class DrawGrid2D<Type extends Coordinate2DType> extends VirtualCoordinate
             gridWidth, gridHeight);
         cr.strokeStyle = 'grey';
         if(this.showGridLines){
-            for(let y = 1; y<this.height; y++){
-                const lineHeightLevel = this.position.y+this.gridSize*y;
-                cr.beginPath();
-                cr.moveTo(this.position.x, lineHeightLevel);
-                cr.lineTo(this.position.x+gridWidth, lineHeightLevel);
-                cr.closePath();
-                cr.stroke();
-            }
-            for(let x = 1; x<this.width; x++){
-                const lineWidthLevel = this.position.x + this.gridSize*x;
-                cr.beginPath();
-                cr.moveTo(lineWidthLevel, this.position.y);
-                cr.lineTo(lineWidthLevel, this.position.y+gridHeight);
-                cr.closePath();
-                cr.stroke();
-            }
+            this.drawGrid(cr);
         }
+
+        this.drawBlocks(cr);
     }
 }
