@@ -10,6 +10,7 @@ export class BlockInfo{
 
     typeInfo:DrawText;
     isDroppingInfo:DrawText;
+    isEmptyInfo:DrawText;
     constructor(pos:Point){
         this.box = new VirtRect(pos.x, pos.y, 200, 200);
         this.moveTo(pos);
@@ -24,6 +25,7 @@ export class BlockInfo{
         this.coordinate = new DrawText('', new Point(pos.x, pos.y+15), 15);
         this.typeInfo = new DrawText('', new Point(pos.x, pos.y+35), 15);
         this.isDroppingInfo = new DrawText('', new Point(pos.x, pos.y+55), 15);
+        this.isEmptyInfo = new DrawText('', new Point(pos.x, pos.y+75), 15);
     }
     parseInfo(b: BlockElement){
         const info = b.getInfo();
@@ -32,11 +34,13 @@ export class BlockInfo{
         const typeString:string = blockTypeStrings[info.type as BlockId];
         this.typeInfo.text = 'Type: ' + typeString;
         this.isDroppingInfo.text = 'Dropping: ' + info.isDropping;
+        this.isEmptyInfo.text = 'Empty: ' + info.isEmpty;
     }
     noInfo(){
         this.coordinate.text = '';
         this.typeInfo.text = '';
         this.isDroppingInfo.text = '';
+        this.isEmptyInfo.text = '';
     }
     draw(cr:CanvasRenderingContext2D):void{
         cr.fillStyle = 'black';
@@ -45,6 +49,7 @@ export class BlockInfo{
         this.coordinate.draw(cr);
         this.typeInfo.draw(cr);
         this.isDroppingInfo.draw(cr);
+        this.isEmptyInfo.draw(cr);
     }
 }
 

@@ -7,3 +7,7 @@ export function randomArrayElement<T>(arr: T[]):T | null{
 export function getRandomInteger(n:number){
     return Math.floor(Math.random()*n);
 }
+
+export function getRandomRanges(min:number, max:number){
+    return Math.random()*(max-min)+min;
+}
