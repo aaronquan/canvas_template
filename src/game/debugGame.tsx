@@ -5,7 +5,7 @@ import { VirtRect } from "../geometry/shapes";
 import ReactLogo from './../assets/react.svg';
 import { BlockInfo, DropBlockPickerInterface } from "./interface";
 
-import { BlockElement, BlockId, DroppingBlock, SolidBlock, generateDroppingBlockFromId } from "./blocks";
+import { BlockElement, BlockId, DroppingBlock, SolidBlock, generateBlockFromId } from "./blocks";
 import { RandomBlockDropper } from "./blockchain";
 import { TimedEvent } from "../time/events";
 import { GameGrid } from "./game";
@@ -77,7 +77,7 @@ export class DebugGameGrid extends GameGrid{
     mouseLeftDown(e:React.MouseEvent<HTMLCanvasElement>, pos:Point){
         //console.log(pos);
         if(this.mouseHighlightedCell){
-            const block = generateDroppingBlockFromId(this.blockPickInterface.picked);
+            const block = generateBlockFromId(this.blockPickInterface.picked);
             this.addNewBlock(this.mouseHighlightedCell.x, this.mouseHighlightedCell.y, block);
         }
         this.blockPickInterface.mouseDown(pos);

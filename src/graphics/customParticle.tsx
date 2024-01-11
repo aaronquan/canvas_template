@@ -8,7 +8,8 @@ import { GravityParticleEffect } from "./particle";
 
 export namespace BlockParticles{
 
-    export function gridDroppingSquare(x:number, y: number, grid:DrawGrid2D<BlockElement>, colour:string='green'):GravityParticleEffect{
+    export function gridDroppingSquare(x:number, y: number, 
+        grid:DrawGrid2D<BlockElement>, colour:string | CanvasPattern ='green'):GravityParticleEffect{
         const position = grid.getGridPosition(x, y);
         const randX = getRandomInteger(grid.gridSize);
         const randY = getRandomInteger(grid.gridSize);

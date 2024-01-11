@@ -3,10 +3,10 @@ import { Coordinate2DType, DrawGrid2D, VirtualGrid2D } from "../geometry/grid";
 import { VirtRect } from "../geometry/shapes";
 
 import ReactLogo from './../assets/react.svg';
-import { BlockInfo, DropBlockPickerInterface } from "./interface";
+import { BlockInfo, DropBlockPickerInterface, PauseMenu } from "./interface";
 
-import { BlockElement, BlockId, DroppingBlock, SolidBlock, generateDroppingBlockFromId } from "./blocks";
-import { RandomBlockDropper } from "./blockchain";
+import { BlockElement, BlockId, DroppingBlock, SolidBlock, generateBlockFromId } from "./blocks";
+import { ControlledBlock, ControlledBlockChain, RandomBlockDropper } from "./blockchain";
 import { TimedEvent } from "../time/events";
 import { CanvasScreen } from "../Canvas/Screen";
 import { MouseEvent } from "react";
@@ -15,7 +15,6 @@ import { GravityParticleEffect, ParticleEffect, ParticleEngine } from "../graphi
 import { getRandomInteger, getRandomRanges } from "../math/Random";
 import CustomBlockCombos from "./customCombos";
 
-const svg = document.createElementNS(ReactLogo, 'svg');
 
 export class GameCanvas implements CanvasScreen{
     gameGrid: GameGrid;
@@ -59,13 +58,21 @@ export class GameCanvas implements CanvasScreen{
 }
 
 export class GameGrid{
+
+    width: number;
+    height: number; //screen dims
+
     grid: DrawGrid2D<BlockElement>;
+    depth: number;
     gridPositions: VirtualGrid2D<Point>;
+
+    spawnArea: VirtRect;
 
     solidBlocks: BlockElement[];
     //activeBlocksMap: {};
 
-    controlledBlock: DroppingBlock | null;
+    //controlledBlock: DroppingBlock | null;
+    controlledBlock: ControlledBlock | null;
 
     mouseHighlightedCell: Point | null;
 
@@ -74,6 +81,9 @@ export class GameGrid{
     blockSpawnEvent: TimedEvent;
     blockTickEvent: TimedEvent;
     dropTickEvent: TimedEvent;
+    dropTickTime: number
+
+    comboPauseTimer: TimedEvent | null;
 
     blockInfo: BlockInfo | null; // todo complete after coding 
 
@@ -83,16 +93,23 @@ export class GameGrid{
 
     blockPickInterface: DropBlockPickerInterface;
 
-    nextCombo: BlockCombo[];
-    comboCount: number;
     comboEngine: BlockComboEngine;
 
-    //particles: ParticleEffect[];
     particleEngine: ParticleEngine;
+    screenShake: Point;
+
+    isPaused: boolean;
+    pauseMenu: PauseMenu;
+
+    static gridSize = 32;
 
     constructor(){
         console.log('init game');
-        this.grid = new DrawGrid2D<BlockElement>(BlockElement, new Point(50, 50), 10, 20, 40);
+        this.width = 0; this.height = 0;
+
+        this.spawnArea = new VirtRect(0, 0, 0, 0);
+        this.depth = 100;
+        this.grid = new DrawGrid2D<BlockElement>(BlockElement, new Point(50, this.depth), 10, 20, GameGrid.gridSize);
         this.gridPositions = this.grid.getGridPositionsMap();
         this.solidBlocks = [];
 
@@ -100,8 +117,11 @@ export class GameGrid{
 
         this.mouseHighlightedCell = null;
         this.blockSpawnEvent = new TimedEvent(2000);
-        this.dropTickEvent = new TimedEvent(100);
-        this.blockTickEvent = new TimedEvent(64);
+        this.dropTickTime = 500;
+        this.dropTickEvent = new TimedEvent(this.dropTickTime);
+        this.blockTickEvent = new TimedEvent(32);
+
+        this.comboPauseTimer = null;
 
         this.testRect = null;
 
@@ -111,26 +131,41 @@ export class GameGrid{
 
         this.blockDropper = new RandomBlockDropper();
         this.blockPickInterface = new DropBlockPickerInterface(new Point(500, 100), 
-        [BlockId.LiquidBlock, BlockId.DirtBlock, BlockId.SedimentBlock, BlockId.StoneBlock]);
+        [BlockId.WaterBlock, BlockId.DirtBlock, BlockId.SandBlock, BlockId.StoneBlock, BlockId.MegaStoneBlock]);
 
-        this.comboEngine = new BlockComboEngine;
-        const testCombo:ComboFunction = CustomBlockCombos.findNHorizontalStoneCombo
-        this.comboEngine.addComboFunction(testCombo);
-        this.comboEngine.addComboFunction(CustomBlockCombos.findVerticalStoneCombo);
+        this.comboEngine = new BlockComboEngine();
+        /*
+        const testCombo:ComboFunction = CustomBlockCombos.findNHorizontalCombo
+        this.comboEngine.addComboFunction(testCombo, [3, BlockId.WaterBlock]);
+        this.comboEngine.addComboFunction(testCombo, [3, BlockId.DirtBlock]);
+        this.comboEngine.addComboFunction(CustomBlockCombos.findNVerticalCombineCombo, [2, BlockId.StoneBlock]);
+        this.comboEngine.addComboFunction(CustomBlockCombos.findDirtWaterCombo);
+        this.comboEngine.addComboFunction(testCombo, [2, BlockId.MegaStoneBlock]);
+        */
 
         //this.nextCombo = [];
         //this.comboCount = 0;
         //this.particles = [];
         this.particleEngine = new ParticleEngine();
+        this.isPaused = false;
+
+        this.screenShake = new Point(0, 0);
+        this.pauseMenu = new PauseMenu();
+
+        this.controlledBlock = this.spawnControllingBlock(); // starts the spawning of blocks
 
     }
     resize(winX: number, winY: number){
+        this.width = winX;
+        this.height = winY;
         //put grid in center
         const halfGridWidth = this.grid.getDrawWidth() / 2;
         const halfScreenWidth = winX /2;
-        this.grid.moveTo(new Point(halfScreenWidth-halfGridWidth, 50));
-        this.blockPickInterface.moveTo(new Point(halfScreenWidth+halfGridWidth+20, 50));
-        this.blockInfo?.moveTo(new Point(halfScreenWidth+halfGridWidth+20, 200))
+        this.grid.moveTo(new Point(halfScreenWidth-halfGridWidth, this.depth));
+        const spawnHeight = 3*GameGrid.gridSize;
+        this.spawnArea = new VirtRect(halfScreenWidth-halfGridWidth, this.depth-spawnHeight, this.grid.getDrawWidth(), spawnHeight);
+        this.blockPickInterface.moveTo(new Point(halfScreenWidth+halfGridWidth+20, this.depth));
+        this.blockInfo?.moveTo(new Point(halfScreenWidth+halfGridWidth+20, this.depth+100))
     }
     updateGrid(){
         const blocks = [];
@@ -160,15 +195,23 @@ export class GameGrid{
 
         const dropTick = this.dropTickEvent.step(time);
         if(dropTick > 0){
-            if(this.controlledBlock){
-                if(this.controlledBlock.checkUnderIsBlock(this.grid)){
-                    this.controlledBlock.isControlling = false;
-                    this.controlledBlock = null;
-
-                    //call next block TODO
+            if(this.controlledBlock){ 
+                if(!this.controlledBlock.checkUnderIsBlock(this.grid)){
+                    //this.controlledBlock.isControlling = false;
+                    //this.controlledBlock = null;
+                    const blocks:BlockElement[] = this.controlledBlock.getBlocks();
+                    //console.log(blocks);
+                    for(const block of blocks){
+                        this.grid.setGrid(block.x, block.y, block);
+                    }
+                    this.controlledBlock = this.spawnControllingBlock();
                 }else{
-                    this.controlledBlock.move(this.grid, 0, 1);
+                    if(!this.controlledBlock.update(this.grid)){
+                        console.log('game over');
+                    }
+                    //this.controlledBlock.move(this.grid, 0, 1);
                 }
+                
             }
         }
 
@@ -177,77 +220,88 @@ export class GameGrid{
 
     }
     update(time:number){
-        if(!this.comboEngine.hasCombos()){
-            this.updateBlocks(time);
-            //this.spawnBlockUpdate(time);
-        }else{
-            //run combo
-            /*
-            for(const combo of this.nextCombo){
-                //console.log(combo);
-                combo.execute(this.grid);
-                const blocks = combo.blocks;
-                for(const block of blocks){
-                    //add particle effect
-                    const position = this.grid.getGridPosition(block.x, block.y);
-                    const randX = getRandomInteger(this.grid.gridSize);
-                    const randY = getRandomInteger(this.grid.gridSize);
-                    const particlePosition = new Point(position.x+randX, position.y+randY);
-                    const angle = getRandomRanges(Math.PI, Math.PI+Math.PI);
-                    const vec = Vector2D.fromAngle(angle);
-                    
-                    const particle = new GravityParticleEffect(particlePosition, vec);
-                    particle.colour = 'green';
-                    vec.multi(150);
-                    this.particleEngine.addParticle(particle);
+        if(!this.isPaused){
+            if(!this.comboPauseTimer){
+                if(!this.comboEngine.hasCombos()){
+                    this.updateBlocks(time);
+                    //this.spawnBlockUpdate(time);
+                }else{
+                    //run combo
+                    const comboEffects = this.comboEngine.execute(this.grid);
+                    this.particleEngine.addParticles(comboEffects.particleEffects);
+                    this.comboPauseTimer = new TimedEvent(250);
+                }
+            }else{
+                this.screenShake = new Point(getRandomRanges(0, 5), getRandomRanges(0, 5));
+                const endPause = this.comboPauseTimer.step(time);
+                if(endPause){
+                    this.comboPauseTimer = null;
+                    this.screenShake = new Point(0, 0);
                 }
             }
-            this.nextCombo = [];
-            */
-           const comboEffects = this.comboEngine.execute(this.grid);
-           this.particleEngine.addParticles(comboEffects.particleEffects);
-        }
 
-        this.particleEngine.update(time);
+            this.particleEngine.update(time);
 
 
-        if(this.mouseHighlightedCell){
-            const mouseBlock = this.grid.getItem(this.mouseHighlightedCell.x, this.mouseHighlightedCell.y);
-            this.blockInfo?.parseInfo(mouseBlock);
-        }else{
-            this.blockInfo?.noInfo();
+            if(this.mouseHighlightedCell){
+                const mouseBlock = this.grid.getItem(this.mouseHighlightedCell.x, this.mouseHighlightedCell.y);
+                this.blockInfo?.parseInfo(mouseBlock);
+            }else{
+                this.blockInfo?.noInfo();
+            }
         }
     }
+    spawnControllingBlock(): ControlledBlock{
+        const gridRange = this.grid.getWidthRange();
+        gridRange.setMax(gridRange.max-1);
+        const rand = gridRange.getRandom();
+        const newBlock = new ControlledBlockChain(rand, BlockId.StoneBlock, 
+            [new ControlledBlock(0, BlockId.StoneBlock, 1, 0)]);
+        
+        return newBlock;
+    }
 
+    //old spawn
+    spawnBlock(): DroppingBlock | null{
+        const gridRange = this.grid.getWidthRange();
+        const rand = gridRange.getRandom();
+        const newBlock = this.addNewBlock(rand, 0);
+        if(newBlock && !this.controlledBlock){
+            return newBlock;
+            //this.controlledBlock.isControlling = true;
+            //this.controlledBlock.isDropping = true;
+            //console.log(this.controlledBlock);
+        }
+        if(!newBlock){
+            console.log('you lost block cannot be placed');
+        }
+        return null;
+    }
     spawnBlockUpdate(time:number){
         const blockSpawns = this.blockSpawnEvent.step(time);
         if(blockSpawns){
-            //for testing spawn random block on width
-            const gridRange = this.grid.getWidthRange();
-            const rand = gridRange.getRandom();
-            const newBlock = this.addNewBlock(rand, 0);
-            if(newBlock && !this.controlledBlock){
-                this.controlledBlock = newBlock;
-                this.controlledBlock.isControlling = true;
-                this.controlledBlock.isDropping = true;
-                //console.log(this.controlledBlock);
-            }
-            if(!newBlock){
-                console.log('you lost block cannot be placed');
-            }
+            this.spawnBlock();
         }
     }
     mouseMove(e:React.MouseEvent<HTMLCanvasElement>, pos: Point){
-        this.mouseHighlightedCell = this.grid.getGridMouseCoordinates(pos);
+        if(!this.isPaused) this.mouseHighlightedCell = this.grid.getGridMouseCoordinates(pos);
+        if(this.isPaused) this.pauseMenu.mouseMove(pos);
         //this.testRect = this.grid.gridRect.smartMouseRectInside(pos, 50, 30, 30);
     }
     mouseLeftDown(e:React.MouseEvent<HTMLCanvasElement>, pos:Point){
         //console.log(pos);
-        if(this.mouseHighlightedCell){
-            const block = generateDroppingBlockFromId(this.blockPickInterface.picked);
-            this.addNewBlock(this.mouseHighlightedCell.x, this.mouseHighlightedCell.y, block);
+        if(!this.isPaused){
+            if(this.mouseHighlightedCell){
+                const block = generateBlockFromId(this.blockPickInterface.picked);
+                this.addNewBlock(this.mouseHighlightedCell.x, this.mouseHighlightedCell.y, block);
+            }
+            this.blockPickInterface.mouseDown(pos);
+        }else{
+            const mods = this.pauseMenu.mouseDown(pos);
+            if(mods){
+                if(mods.unpause) this.isPaused = false;
+            }
         }
-        this.blockPickInterface.mouseDown(pos);
     }
     mouseLeftUp(e:React.MouseEvent<HTMLCanvasElement>, pos:Point){
 
@@ -262,6 +316,7 @@ export class GameGrid{
 
     }
     keyDown(e:KeyboardEvent, key:string){
+        console.log(key);
         switch(key){
             case 'a':
                 this.blockMoveLeft();
@@ -269,17 +324,34 @@ export class GameGrid{
             case 'd':
                 this.blockMoveRight();
                 break;
+            case 's':
+                this.dropTickEvent.interval = this.blockTickEvent.interval;
+                break;
+            case 'e':
+                this.controlledBlock?.rotateClockwise();
+                break;
+            case 'q':
+                this.controlledBlock?.rotateAntiClockwise();
+                break;
+            case 'z':
+                console.log(this.grid);
+                break;
             case ' ':
                 this.updateGrid();
                 console.log('update grid');
                 break;
-        }
-        if(key === 'q'){
-            console.log(this.grid);
+            case 'Escape':
+                //console.log('escape');
+                this.isPaused = !this.isPaused;
+                break;
         }
     }
     keyUp(e:KeyboardEvent, key:string){
-
+        switch(key){
+            case 's':
+                this.dropTickEvent.interval = this.dropTickTime;
+                break;
+        }
     }
     blockMove(x:number, y:number=0){
         //this.controlledBlock
@@ -321,15 +393,21 @@ export class GameGrid{
         for(const block of this.solidBlocks){
             block.update(this.grid);
         }
+        /*
         if(!this.controlledBlock?.isDropping){
             this.controlledBlock = null;
         }
+        */
     }
     drawOverCell(cr:CanvasRenderingContext2D, pt: Point){
 
     }
 
     draw(cr:CanvasRenderingContext2D):void{
+        cr.translate(this.screenShake.x, this.screenShake.y);
+
+        cr.fillStyle = 'black';
+        this.spawnArea.fill(cr);
         this.grid.draw(cr);
 
         //draw outline
@@ -338,6 +416,7 @@ export class GameGrid{
             cr.strokeStyle = 'green';
             cr.strokeRect(position.x, position.y, this.grid.gridSize, this.grid.gridSize);
         }
+        this.controlledBlock?.draw(cr, this.grid);
 
         if(this.mouseHighlightedCell){
             const position = this.grid.getGridPosition(this.mouseHighlightedCell.x, this.mouseHighlightedCell.y);
@@ -356,6 +435,10 @@ export class GameGrid{
         }
         */
         this.particleEngine.draw(cr);
+
+        if(this.isPaused) this.pauseMenu.draw(cr, this.width, this.height);
+
+        cr.resetTransform();
         /*
         if(this.testTexture){
             //textures also scale

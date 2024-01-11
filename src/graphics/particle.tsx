@@ -42,7 +42,7 @@ export class ParticleEngine{
 export class ParticleEffect{
     position: Point;
     velocity: Vector2D;
-    colour: string;
+    colour: string | CanvasPattern;
     size: number;
 
     maxDuration: number; //durations in seconds

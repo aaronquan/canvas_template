@@ -5,7 +5,12 @@ import { ParticleEffect } from "../graphics/particle";
 
 
 export enum BlockId {
-    Default, StoneBlock, DirtBlock, WoodBlock, SedimentBlock, LiquidBlock, MegaStoneBlock,
+    Default, SedimentBlock, LiquidBlock,
+    AirBlock, 
+    StoneBlock, DirtBlock, WoodBlock, 
+    MegaStoneBlock,
+    WaterBlock, SandBlock,
+    WetSoilBlock
 }
 
 export const blockTypeStrings = {
@@ -15,10 +20,14 @@ export const blockTypeStrings = {
     [BlockId.WoodBlock]: 'Wood',
     [BlockId.SedimentBlock]: 'Sediment',
     [BlockId.LiquidBlock]: 'Liquid',
-    [BlockId.MegaStoneBlock]: 'MegaStone'
+    [BlockId.MegaStoneBlock]: 'MegaStone',
+    [BlockId.AirBlock]: 'Air',
+    [BlockId.SandBlock]: 'Sand',
+    [BlockId.WaterBlock]: 'Water',
+    [BlockId.WetSoilBlock]: 'Wet Soil'
 }
 
-export function generateDroppingBlockFromId(blockId: BlockId): DroppingBlock{
+export function generateBlockFromId(blockId: BlockId): DroppingBlock{
     switch(blockId){
         case BlockId.StoneBlock:
             return new StoneBlock();
@@ -26,14 +35,40 @@ export function generateDroppingBlockFromId(blockId: BlockId): DroppingBlock{
             return new DirtBlock();
         case BlockId.WoodBlock:
             return new WoodBlock();
-        case BlockId.SedimentBlock:
-            return new SedimentBlock();
-        case BlockId.LiquidBlock:
-            return new LiquidBlock();
+        case BlockId.SandBlock:
+            return new SandBlock();
+        case BlockId.WaterBlock:
+            return new WaterBlock();
+        case BlockId.MegaStoneBlock:
+            return new MegaStoneBlock();
+        case BlockId.WetSoilBlock:
+            return new WetSoilBlock();
         default:
             console.log('Block not found')
     }
     return new StoneBlock();
+}
+
+export function blockTextureFromId(blockId: BlockId): string | CanvasPattern{
+    switch(blockId){
+        case BlockId.StoneBlock:
+            return StoneBlock.colour;
+        case BlockId.DirtBlock:
+            return DirtBlock.colour;
+        case BlockId.WoodBlock:
+            return WoodBlock.colour;
+        case BlockId.SandBlock:
+            return SandBlock.colour;
+        case BlockId.WaterBlock:
+            return WaterBlock.colour;
+        case BlockId.MegaStoneBlock:
+            return MegaStoneBlock.colour;
+        case BlockId.WetSoilBlock:
+            return WetSoilBlock.colour;
+        default:
+            console.log('Block not found')
+    }
+    return StoneBlock.colour;
 }
 
 export class BlockElement implements Coordinate2DType{
@@ -42,6 +77,7 @@ export class BlockElement implements Coordinate2DType{
     isEmpty: boolean;
     isSolid: boolean;
     isLiquid: boolean;
+    isFloating: boolean;
     //isFalling: boolean; 
     //falling means block is not user controlled and is still in motion
 
@@ -50,7 +86,7 @@ export class BlockElement implements Coordinate2DType{
     type: BlockId;
     isDropping: boolean;
     value:number;
-    colour: string;
+    static colour: string | CanvasPattern = 'transparent';
     constructor(x?:number, y?:number){
         this.x = x ? x : 0;
         this.y = y ? y : 0;
@@ -60,9 +96,10 @@ export class BlockElement implements Coordinate2DType{
         //this.isFalling = false;
         this.isDropping = true;
         this.isControlling = false;
+        this.isFloating = false;
         this.type = BlockId.Default;
         this.value = 0;
-        this.colour = 'transparent';
+        //BlockElement.colour = 'transparent';
     }
     getRelativeBlock(grid:DrawGrid2D<BlockElement>, x:number, y:number):BlockElement | null{
         return grid.getItem(this.x+x, this.y+y);
@@ -82,14 +119,26 @@ export class BlockElement implements Coordinate2DType{
     getDestroyParticles(_grid:DrawGrid2D<BlockElement>):ParticleEffect[]{
         return [];
     }
+    getColour():string | CanvasPattern{
+        return BlockElement.colour;
+    }
     getInfo():any{
         return {...this};
     }
     draw(cr:CanvasRenderingContext2D, size:number=1, position?:Point):void{
-        //cr.fillStyle = this.colour;
-        //const x = position ? position.x : 0;
-        //const y = position ? position.y : 0;
-        //cr.fillRect(x, y, size, size);
+        /*
+        cr.fillStyle = this.getColour();
+        const x = position ? position.x : 0;
+        const y = position ? position.y : 0;
+        cr.fillRect(x, y, size, size);
+        */
+    }
+}
+
+export class AirBlock extends BlockElement{
+    constructor(x?:number, y?:number){
+        super(x, y);
+        this.type = BlockId.AirBlock;
     }
 }
 
@@ -116,7 +165,7 @@ export class DroppingBlock extends BlockElement{
         const yd1 = this.y + 1;
         if(grid.isInGrid(this.x, yd1)){
             const underBlock = grid.getItem(this.x, yd1);
-            return !underBlock.isEmpty;
+            return !underBlock.isEmpty && !underBlock.isControlling;
         }
         return true;
     }
@@ -143,10 +192,14 @@ export class DroppingBlock extends BlockElement{
         this.updateDrop(grid);
     }
     draw(cr:CanvasRenderingContext2D, size:number=1, position?:Point):void{
-        cr.fillStyle = this.colour;
+        cr.fillStyle = this.getColour();
         const x = position ? position.x : 0;
         const y = position ? position.y : 0;
-        cr.fillRect(x, y, size, size);
+        const tr = cr.getTransform()
+        cr.translate(x, y);
+        //cr.scale(1, 1)
+        cr.fillRect(0, 0, size, size);
+        cr.setTransform(tr);
     }
 }
 
@@ -157,15 +210,24 @@ export class SolidBlock extends DroppingBlock{
         this.isSolid = true;
         //this.isFalling = true; 
     }
+    getDestroyParticles(grid: DrawGrid2D<BlockElement>): ParticleEffect[] {
+        const p1 = BlockParticles.gridDroppingSquare(this.x, this.y, grid, this.getColour());
+        const p2 = BlockParticles.gridDroppingSquare(this.x, this.y, grid, this.getColour());
+        return [p1, p2];
+    }
     update(grid:DrawGrid2D<BlockElement>){
         super.update(grid);
     }
 }
 export class WoodBlock extends SolidBlock{
+    static colour:string | CanvasPattern = 'grey';
     constructor(x?:number, y?:number){
         super(x, y);
         this.type = BlockId.WoodBlock;
-        this.colour = 'grey';
+        WoodBlock.colour = 'grey';
+    }
+    getColour():string | CanvasPattern{
+        return WoodBlock.colour;
     }
     draw(cr:CanvasRenderingContext2D, size:number=1, position?:Point):void{
         //cr.fillStyle = 'grey';
@@ -175,10 +237,14 @@ export class WoodBlock extends SolidBlock{
 }
 
 export class StoneBlock extends SolidBlock{
+    static colour:string | CanvasPattern = 'white';
     constructor(x?:number, y?:number){
         super(x, y);
         this.type = BlockId.StoneBlock;
-        this.colour = 'white';
+        //BlockElement.colour = 'white';
+    }
+    getColour():string | CanvasPattern{
+        return StoneBlock.colour;
     }
     //if next to another stone block remove
     checkCombo(grid:DrawGrid2D<BlockElement>):boolean{
@@ -193,8 +259,8 @@ export class StoneBlock extends SolidBlock{
         return new MegaStoneBlock();
     }
     getDestroyParticles(grid: DrawGrid2D<BlockElement>): ParticleEffect[] {
-        const p1 = BlockParticles.gridDroppingSquare(this.x, this.y, grid, this.colour);
-        const p2 = BlockParticles.gridDroppingSquare(this.x, this.y, grid, this.colour);
+        const p1 = BlockParticles.gridDroppingSquare(this.x, this.y, grid, this.getColour());
+        const p2 = BlockParticles.gridDroppingSquare(this.x, this.y, grid, this.getColour());
         return [p1, p2];
     }
     draw(cr:CanvasRenderingContext2D, size:number=1, position?:Point):void{
@@ -204,11 +270,30 @@ export class StoneBlock extends SolidBlock{
     }
 }
 
+//todo
+export class WetSoilBlock extends SolidBlock{
+    static colour:string | CanvasPattern = 'pink';
+    constructor(x?:number, y?:number){
+        super(x, y);
+        this.type = BlockId.WetSoilBlock;
+    }
+    getColour():string | CanvasPattern{
+        return WetSoilBlock.colour;
+    }
+}
+
 export class MegaStoneBlock extends StoneBlock{
+    static colour:string | CanvasPattern = 'red';
     constructor(x?:number, y?:number){
         super(x, y);
         this.type = BlockId.MegaStoneBlock;
-        this.colour = 'red';
+        this.isDropping = false;
+    }
+    getColour():string | CanvasPattern{
+        return MegaStoneBlock.colour;
+    }
+    update(grid:DrawGrid2D<BlockElement>){
+
     }
     draw(cr:CanvasRenderingContext2D, size:number=1, position?:Point):void{
         //cr.fillStyle = 'white';
@@ -222,7 +307,12 @@ export class SedimentBlock extends DroppingBlock{
         super(x, y);
         this.isSolid = true;
         this.type = BlockId.SedimentBlock;
-        this.colour = 'yellow';
+    }
+    getDestroyParticles(grid: DrawGrid2D<BlockElement>): ParticleEffect[] {
+        const p1 = BlockParticles.gridDroppingSquare(this.x, this.y, grid, this.getColour());
+        const p2 = BlockParticles.gridDroppingSquare(this.x, this.y, grid, 'white');
+        const p3 = BlockParticles.gridDroppingSquare(this.x, this.y, grid, this.getColour());
+        return [p1, p2, p3];
     }
     dropSide(grid:DrawGrid2D<BlockElement>, x:number, block:BlockElement):boolean{
         const sideBlock = grid.getItem(x, this.y);
@@ -300,11 +390,29 @@ export class SedimentBlock extends DroppingBlock{
     }
 }
 
+export class SandBlock extends SedimentBlock{
+    static colour: string | CanvasPattern = 'yellow';
+    constructor(x?:number, y?:number){
+        super(x, y);
+        this.type = BlockId.SandBlock;
+
+    }
+    getColour():string | CanvasPattern{
+        return SandBlock.colour;
+    }
+}
+
 export class DirtBlock extends SedimentBlock{
+    static colour: string | CanvasPattern = 'brown';
     constructor(x?:number, y?:number){
         super(x, y);
         this.type = BlockId.DirtBlock;
-        this.colour = 'brown';
+    }
+    getColour():string | CanvasPattern{
+        return DirtBlock.colour;
+    }
+    combine(blocks: BlockElement[]): BlockElement {
+        return new WetSoilBlock();
     }
     draw(cr:CanvasRenderingContext2D, size:number=1, position?:Point):void{
         //cr.fillStyle = 'brown';
@@ -320,7 +428,6 @@ export class LiquidBlock extends SedimentBlock{
         this.isLiquid = true;
         this.isSolid = false;
         this.type = BlockId.LiquidBlock;
-        this.colour = 'blue';
     }
 
     searchLeft(grid:DrawGrid2D<BlockElement>): number | null{
@@ -398,7 +505,12 @@ export class LiquidBlock extends SedimentBlock{
             }
         }
     }
-    
+    getDestroyParticles(grid: DrawGrid2D<BlockElement>): ParticleEffect[] {
+        const p1 = BlockParticles.gridDroppingSquare(this.x, this.y, grid, this.getColour());
+        const p2 = BlockParticles.gridDroppingSquare(this.x, this.y, grid, 'white');
+        const p3 = BlockParticles.gridDroppingSquare(this.x, this.y, grid, this.getColour());
+        return [p1, p2, p3];
+    }
     moveRandomSide(grid:DrawGrid2D<BlockElement>){
         const r = Math.random();
         if(r < 0.5){
@@ -415,4 +527,15 @@ export class LiquidBlock extends SedimentBlock{
         cr.fillRect(x, y, size, size);
     }
     */
+}
+
+export class WaterBlock extends LiquidBlock{
+    static colour: string | CanvasPattern = 'blue';
+    constructor(x?:number, y?:number){
+        super(x, y);
+        this.type = BlockId.WaterBlock;
+    }
+    getColour(): string | CanvasPattern{
+        return WaterBlock.colour;
+    }
 }

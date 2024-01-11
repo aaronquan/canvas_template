@@ -25,7 +25,8 @@ export type ComboExecutionReturn = {
 export class BlockComboEngine{
     combos: BlockCombo[];
     comboFunctions: ComboFunctionArgs[];
-    multiplier: number
+    multiplier: number;
+    
     constructor(){
         this.combos = [];
         this.comboFunctions = [];

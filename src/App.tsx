@@ -10,6 +10,10 @@ import { AnimTime } from './time/time';
 import { GameGrid } from './game/game';
 import { useKeys } from './input/keys';
 import { GameMain } from './game/main';
+import { BlockElement, StoneBlock } from './game/blocks';
+
+import testTexture from './assets/testblock.png'
+import { loadTexturesIntoGame } from './graphics/loadTextures';
 
 function App() {
   const game = useRef<GameMain>();
@@ -30,28 +34,22 @@ function App() {
   useEffect(() => {
     if(contextRef.current){
       const cr = contextRef.current;
-      const img = new Image();
-      img.src = '/src/assets/react.svg';
-      img.onload = () => {
-        console.log('loaded')
-        const pattern = cr.createPattern(img, 'repeat');
-        //if(game.current) game.current.testTexture = pattern;
-      }
+
+      game.current = new GameMain();
+      if(windowSize.current) game.current.resize?.(windowSize.current.width, windowSize.current.height);
+
+      loadTexturesIntoGame(cr);
     }
   }, [contextRef]);
   
   function handleResize(size:WindowSize){
     windowSize.current = size;
     if(game.current) game.current.resize(size.width, size.height);
-    //contextRef.current?.clearRect(0, 0, size.width, size.height);
-    //if(contextRef.current) drawPicture(contextRef.current);
   }
   function animationStep(cr:CanvasRenderingContext2D, time: number, inputChanges: InputChanges, animTime:AnimTime){
     if(windowSize.current) cr.clearRect(0, 0, windowSize.current.width, windowSize.current.height);
     if(game.current){
       game.current.draw(cr);
-      //drawCursor(cr);
-      //console.log(rawMouse);
       game.current.update(animTime.frameTime);
     }
   }

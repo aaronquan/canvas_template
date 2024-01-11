@@ -1,8 +1,52 @@
 import { Point } from "../geometry/geometry";
 import { VirtRect } from "../geometry/shapes";
 import { DrawText } from "../graphics/text";
-import { BlockElement, BlockId, DroppingBlock, StoneBlock, blockTypeStrings, generateDroppingBlockFromId } from "./blocks";
+import { BlockElement, BlockId, DroppingBlock, StoneBlock, blockTypeStrings, generateBlockFromId } from "./blocks";
 
+
+type PauseMenuModifications = {
+    unpause? : boolean;
+}
+
+export class PauseMenu{
+    box: VirtRect;
+    closeBox: VirtRect;
+    closeBoxColour: string;
+
+    //modifications: PauseMenuModifications
+    //screenWidth: number;
+    //screenHeight;
+    constructor(){
+        this.box = new VirtRect(100, 100, 200, 200);
+        this.closeBox = new VirtRect(180, 150, 40, 30);
+        this.closeBoxColour = 'white';
+    }
+    moveTo(pos: Point){
+        this.box.moveTo(pos);
+        this.closeBox.moveTo(pos)
+    }
+    mouseMove(pos: Point){
+        if(this.closeBox.hitPoint(pos)){
+            this.closeBoxColour = '#dddddd';
+        }else{
+            this.closeBoxColour = 'white';
+        }
+    }
+    mouseDown(pos: Point):PauseMenuModifications | null{
+        if(this.closeBox.hitPoint(pos)){
+            return {unpause: true};
+        }
+        return null;
+    }
+    draw(cr:CanvasRenderingContext2D, width:number, height:number):void{
+        cr.fillStyle = '#00000044';
+        cr.fillRect(0, 0, width, height);
+        cr.fillStyle = 'grey';
+        this.box.fill(cr);
+        cr.fillStyle = this.closeBoxColour;
+        this.closeBox.fill(cr);
+    }
+}
 
 export class BlockInfo{
     box:VirtRect;
@@ -62,7 +106,7 @@ export class DropBlockPickerInterface{
     constructor(pos:Point, blocks: BlockId[]){
         this.blockSize = 50;
         this.box = new VirtRect(pos.x, pos.y, blocks.length*this.blockSize, this.blockSize);
-        this.blocks = blocks.map((id) => generateDroppingBlockFromId(id));
+        this.blocks = blocks.map((id) => generateBlockFromId(id));
         this.pickedIndex = 0;
         this.picked = blocks.length > 0 ? blocks[0] : BlockId.StoneBlock;
     }
