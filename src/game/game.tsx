@@ -3,17 +3,18 @@ import { Coordinate2DType, DrawGrid2D, VirtualGrid2D } from "../geometry/grid";
 import { VirtRect } from "../geometry/shapes";
 
 import ReactLogo from './../assets/react.svg';
-import { BlockInfo, DropBlockPickerInterface, PauseMenu } from "./interface";
+import { BlockInfo, BlockProbabilityInterface, DropBlockPickerInterface, InterfaceBox, PauseMenu, ShapeProbabilityInterface } from "./interface";
 
 import { BlockElement, BlockId, DroppingBlock, SolidBlock, generateBlockFromId } from "./blocks";
-import { ControlledBlock, ControlledBlockChain, RandomBlockDropper } from "./blockchain";
+import { ControlledBlock,  RandomBlockGenerator, generateRandomBlock} from "./blockchain";
 import { TimedEvent } from "../time/events";
 import { CanvasScreen } from "../Canvas/Screen";
 import { MouseEvent } from "react";
-import { BlockCombo, BlockComboEngine, ComboFunction } from "./combo";
+import { BlockCombo, BlockComboEngine, ComboFunction, PointEffect } from "./combo";
 import { GravityParticleEffect, ParticleEffect, ParticleEngine } from "../graphics/particle";
 import { getRandomInteger, getRandomRanges } from "../math/Random";
-import CustomBlockCombos from "./customCombos";
+import CustomBlockCombos, { BlockCombos } from "./customCombos";
+import { BlockLevelManager, level1Function } from "./level";
 
 
 export class GameCanvas implements CanvasScreen{
@@ -89,9 +90,15 @@ export class GameGrid{
 
     testTexture: CanvasPattern | null;
 
-    blockDropper: RandomBlockDropper;
+    //blockDropper: RandomBlockDropper;
 
     blockPickInterface: DropBlockPickerInterface;
+
+    shapeProbabilityInterface: ShapeProbabilityInterface;
+    blockProbabilityInterface: BlockProbabilityInterface;
+
+    interfaces: Map<string, InterfaceBox>;
+    //0 - shapeProbabilityInterface, 1 - blockProbabilityInterface
 
     comboEngine: BlockComboEngine;
 
@@ -101,6 +108,11 @@ export class GameGrid{
     isPaused: boolean;
     pauseMenu: PauseMenu;
 
+    levelManager: BlockLevelManager;
+    controlledBlockGenerator: RandomBlockGenerator;
+
+    testCombo: BlockCombos.BlockComboBlocks;
+
     static gridSize = 32;
 
     constructor(){
@@ -109,7 +121,7 @@ export class GameGrid{
 
         this.spawnArea = new VirtRect(0, 0, 0, 0);
         this.depth = 100;
-        this.grid = new DrawGrid2D<BlockElement>(BlockElement, new Point(50, this.depth), 10, 20, GameGrid.gridSize);
+        this.grid = new DrawGrid2D<BlockElement>(BlockElement, new Point(50, this.depth), 10, 18, GameGrid.gridSize);
         this.gridPositions = this.grid.getGridPositionsMap();
         this.solidBlocks = [];
 
@@ -129,7 +141,7 @@ export class GameGrid{
 
         this.testTexture = null;
 
-        this.blockDropper = new RandomBlockDropper();
+        //this.blockDropper = new RandomBlockDropper();
         this.blockPickInterface = new DropBlockPickerInterface(new Point(500, 100), 
         [BlockId.WaterBlock, BlockId.DirtBlock, BlockId.SandBlock, BlockId.StoneBlock, BlockId.MegaStoneBlock]);
 
@@ -143,6 +155,8 @@ export class GameGrid{
         this.comboEngine.addComboFunction(testCombo, [2, BlockId.MegaStoneBlock]);
         */
 
+        //this.interfaces = [];
+
         //this.nextCombo = [];
         //this.comboCount = 0;
         //this.particles = [];
@@ -152,8 +166,22 @@ export class GameGrid{
         this.screenShake = new Point(0, 0);
         this.pauseMenu = new PauseMenu();
 
+        this.levelManager = new BlockLevelManager();
+        this.controlledBlockGenerator = new RandomBlockGenerator();
+        this.levelManager.initLevel0(this.controlledBlockGenerator);
+
         this.controlledBlock = this.spawnControllingBlock(); // starts the spawning of blocks
 
+        this.interfaces = new Map<string, InterfaceBox>();
+        this.shapeProbabilityInterface = new ShapeProbabilityInterface(new Point(), 100, 200);
+        this.blockProbabilityInterface = new BlockProbabilityInterface(new Point(), 100, 200);
+        this.interfaces.set('shapeProbability', this.shapeProbabilityInterface);
+        this.interfaces.set('blockProbability', this.blockProbabilityInterface);
+        this.shapeProbabilityInterface.setData(this.controlledBlockGenerator.shapeProbabilities.asList());
+        this.blockProbabilityInterface.setData(this.controlledBlockGenerator.blockProbabilities.asList());
+
+
+        this.testCombo = BlockCombos.newBlockComboBlocks();
     }
     resize(winX: number, winY: number){
         this.width = winX;
@@ -166,6 +194,9 @@ export class GameGrid{
         this.spawnArea = new VirtRect(halfScreenWidth-halfGridWidth, this.depth-spawnHeight, this.grid.getDrawWidth(), spawnHeight);
         this.blockPickInterface.moveTo(new Point(halfScreenWidth+halfGridWidth+20, this.depth));
         this.blockInfo?.moveTo(new Point(halfScreenWidth+halfGridWidth+20, this.depth+100))
+
+        this.interfaces.get('shapeProbability')?.moveTo(new Point(halfScreenWidth-halfGridWidth - 150, this.depth));
+        this.interfaces.get('blockProbability')?.moveTo(new Point(halfScreenWidth-halfGridWidth - 150, this.depth + 250));
     }
     updateGrid(){
         const blocks = [];
@@ -202,7 +233,12 @@ export class GameGrid{
                     const blocks:BlockElement[] = this.controlledBlock.getBlocks();
                     //console.log(blocks);
                     for(const block of blocks){
-                        this.grid.setGrid(block.x, block.y, block);
+                        if(this.grid.isInGrid(block.x, block.y)){
+                            this.grid.setGrid(block.x, block.y, block);
+                        }else{
+                            //also game over
+                            console.log('game over');
+                        }
                     }
                     this.controlledBlock = this.spawnControllingBlock();
                 }else{
@@ -229,6 +265,15 @@ export class GameGrid{
                     //run combo
                     const comboEffects = this.comboEngine.execute(this.grid);
                     this.particleEngine.addParticles(comboEffects.particleEffects);
+                    const countPoints = comboEffects.pointEffects.reduce((pts:number, pe:PointEffect) => {
+                        return pts + pe.value;
+                    }, 0);
+                    const levelRet = this.levelManager.addPoints(countPoints, this.controlledBlockGenerator);
+                    //if(levelRet.
+                    //change this
+                    this.blockProbabilityInterface.setData(this.controlledBlockGenerator.blockProbabilities.asList());
+                    this.shapeProbabilityInterface.setData(this.controlledBlockGenerator.shapeProbabilities.asList());
+
                     this.comboPauseTimer = new TimedEvent(250);
                 }
             }else{
@@ -255,9 +300,11 @@ export class GameGrid{
         const gridRange = this.grid.getWidthRange();
         gridRange.setMax(gridRange.max-1);
         const rand = gridRange.getRandom();
-        const newBlock = new ControlledBlockChain(rand, BlockId.StoneBlock, 
-            [new ControlledBlock(0, BlockId.StoneBlock, 1, 0)]);
-        
+        //const newBlock = new ControlledBlockChain(rand, BlockId.StoneBlock, 
+        //    [new ControlledBlock(0, BlockId.StoneBlock, 1, 0)]);
+        const nBlocks = 0;
+        //const newBlock = generateRandomBlocks(rand, 0);
+        const newBlock = this.controlledBlockGenerator.generateRandomBlocks(rand);
         return newBlock;
     }
 
@@ -328,13 +375,18 @@ export class GameGrid{
                 this.dropTickEvent.interval = this.blockTickEvent.interval;
                 break;
             case 'e':
-                this.controlledBlock?.rotateClockwise();
+                this.controlledBlock?.rotateClockwise(this.grid);
                 break;
             case 'q':
-                this.controlledBlock?.rotateAntiClockwise();
+                this.controlledBlock?.rotateAntiClockwise(this.grid);
                 break;
             case 'z':
-                console.log(this.grid);
+
+                const combo = BlockCombos.generateCombo(this.controlledBlockGenerator.blockProbabilities);
+                console.log(combo);
+                this.testCombo = combo;
+                this.comboEngine.addRandomCombos(combo);
+                //this.comboEngine.
                 break;
             case ' ':
                 this.updateGrid();
@@ -381,7 +433,7 @@ export class GameGrid{
         if(this.grid.getItem(x, y).isEmpty){
             //aconst newSolid = this.blockDropper.sedimentBlock(); 
             // drops sediment only
-            const newBlock = block ? block : this.blockDropper.randomBlock();
+            const newBlock = block ? block : generateRandomBlock();
             this.grid.setGrid(x, y, newBlock);
             this.solidBlocks.push(newBlock);
             //console.log('add block');
@@ -405,6 +457,11 @@ export class GameGrid{
 
     draw(cr:CanvasRenderingContext2D):void{
         cr.translate(this.screenShake.x, this.screenShake.y);
+
+        cr.fillStyle = 'black';
+        cr.fillText('Points: '+this.levelManager.points, 10, 25);
+        cr.fillText('Level: '+this.levelManager.level, 10, 50);
+        cr.fillText('Coins: '+this.levelManager.coins, 10, 75);
 
         cr.fillStyle = 'black';
         this.spawnArea.fill(cr);
@@ -437,6 +494,21 @@ export class GameGrid{
         this.particleEngine.draw(cr);
 
         if(this.isPaused) this.pauseMenu.draw(cr, this.width, this.height);
+
+        for(const [_id, inter] of this.interfaces){
+            inter.draw(cr);
+        }
+
+        this.comboEngine.drawCombos(cr, (this.width/2)+(this.grid.getDrawWidth()/2)+10, 
+        this.grid.position.y+300);
+        /*
+        let y = 0;
+        const blockSize = 15;
+        for(const combo of this.comboEngine.randomCombos){
+            BlockCombos.drawCombo(cr, combo.blocks, blockSize, 10, 10+y);
+            console.log(combo.range.maxY);
+            y += (combo.range.maxY+1)*blockSize + 10;
+        }*/
 
         cr.resetTransform();
         /*

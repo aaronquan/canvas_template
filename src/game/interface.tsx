@@ -1,11 +1,26 @@
 import { Point } from "../geometry/geometry";
 import { VirtRect } from "../geometry/shapes";
 import { DrawText } from "../graphics/text";
+import { ProbabilityItem } from "../math/Random";
 import { BlockElement, BlockId, DroppingBlock, StoneBlock, blockTypeStrings, generateBlockFromId } from "./blocks";
 
 
 type PauseMenuModifications = {
     unpause? : boolean;
+}
+
+export class InterfaceBox{
+    box:VirtRect;
+    static textSize = 20;
+    constructor(pt:Point, width:number, height:number){
+        this.box = new VirtRect(pt.x, pt.y, width, height);
+    }
+    moveTo(pos: Point){
+        this.box.moveTo(pos);
+    }
+    draw(cr:CanvasRenderingContext2D):void{
+        this.box.fill(cr);
+    }
 }
 
 export class PauseMenu{
@@ -38,9 +53,9 @@ export class PauseMenu{
         }
         return null;
     }
-    draw(cr:CanvasRenderingContext2D, width:number, height:number):void{
+    draw(cr:CanvasRenderingContext2D, screenWidth:number, screenHeight:number):void{
         cr.fillStyle = '#00000044';
-        cr.fillRect(0, 0, width, height);
+        cr.fillRect(0, 0, screenWidth, screenHeight);
         cr.fillStyle = 'grey';
         this.box.fill(cr);
         cr.fillStyle = this.closeBoxColour;
@@ -141,6 +156,82 @@ export class DropBlockPickerInterface{
             cr.lineWidth = 2;
             cr.strokeRect(this.box.left+this.pickedIndex*this.blockSize, this.box.top, 
                 this.blockSize, this.blockSize);
+        }
+    }
+}
+
+export class ShapeProbabilityInterface extends InterfaceBox{
+    data: ProbabilityItem<number>[];
+    texts: DrawText[];
+    constructor(pt:Point, width:number, height:number){
+        super(pt, width, height);
+        this.data = [];
+
+        this.texts = [];
+    }
+    setData(probs: ProbabilityItem<number>[]){
+        let textY = this.box.top + InterfaceBox.textSize;
+        this.texts = [];
+        for(const prob of probs){
+            this.texts.push(new DrawText(prob.item+': '+prob.probability.toFixed(2), 
+            new Point(this.box.left, textY), InterfaceBox.textSize));
+            textY += InterfaceBox.textSize+5;
+        }
+        this.data = probs;
+    }
+    moveTo(pt:Point){
+        super.moveTo(pt);
+        let textY = this.box.top + InterfaceBox.textSize;
+        for(const text of this.texts){
+            text.textPoint = new Point(this.box.left, textY);
+            textY += InterfaceBox.textSize+5;
+        }
+    }
+
+    draw(cr:CanvasRenderingContext2D):void{
+        cr.fillStyle = 'black';
+        super.draw(cr);
+        for(const text of this.texts){
+            text.draw(cr);
+        }
+    }
+}
+
+export class BlockProbabilityInterface extends InterfaceBox{
+    data: ProbabilityItem<BlockId>[];
+    texts: DrawText[];
+    static textSize = 20;
+    constructor(pt:Point, width:number, height:number){
+        super(pt, width, height);
+        this.data = [];
+
+        this.texts = [];
+    }
+    setData(probs: ProbabilityItem<BlockId>[]){
+        let textY = this.box.top + InterfaceBox.textSize;
+        this.texts = [];
+        for(const prob of probs){
+            const newText = new DrawText(blockTypeStrings[prob.item]+': '+prob.probability.toFixed(2), 
+            new Point(this.box.left, textY), InterfaceBox.textSize);
+            this.texts.push(newText);
+            textY += InterfaceBox.textSize+5;
+        }
+        this.data = probs;
+    }
+    moveTo(pt:Point){
+        super.moveTo(pt);
+        let textY = this.box.top + BlockProbabilityInterface.textSize;
+        for(const text of this.texts){
+            text.textPoint = new Point(this.box.left, textY);
+            textY += InterfaceBox.textSize+5;
+        }
+    }
+
+    draw(cr:CanvasRenderingContext2D):void{
+        cr.fillStyle = 'black';
+        super.draw(cr);
+        for(const text of this.texts){
+            text.draw(cr);
         }
     }
 }

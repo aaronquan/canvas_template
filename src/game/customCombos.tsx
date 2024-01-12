@@ -1,5 +1,8 @@
+import { Point } from "../geometry/geometry";
 import { DrawGrid2D } from "../geometry/grid";
-import { BlockElement, BlockId } from "./blocks";
+import { Probabilities, randomArrayElement } from "../math/Random";
+import { BlockElement, BlockId, generateBlockFromId } from "./blocks";
+import { BlockShape, comboShape } from "./blockshapes";
 import { BlockCombo, CombineCombo } from "./combo";
 
 //interface ComboFunction
@@ -127,6 +130,103 @@ namespace CustomBlockCombos{
         }
         return combos;
     }   
+}
+
+
+
+export namespace BlockCombos{
+    type BlockRange = {
+        maxX: number;
+        maxY: number;
+    }
+    export type BlockComboBlocks = {
+        blocks: CBlock[];
+        range: BlockRange
+    }
+    export function newBlockComboBlocks(): BlockComboBlocks{
+        return {
+            blocks: [],
+            range: {
+                maxX: 0,
+                maxY: 0
+            }
+        }
+    }
+
+    export type CBlock = {
+        x: number;
+        y: number;
+        id: BlockId;
+    }
+    export function generateCombo(blockProbabilities:Probabilities<BlockId>):BlockComboBlocks{
+        const shape:BlockShape | null = randomArrayElement(comboShape);
+        if(shape){
+            const range = getBlockRange(shape);
+            const combo:CBlock[] = shape?.map((pos) => {
+                const id = blockProbabilities.roll();
+                if(id) return {...pos, id: id};
+                return {...pos, id: BlockId.StoneBlock};
+            });
+            return {
+                blocks: combo,
+                range: range
+            };
+        }
+        return newBlockComboBlocks();
+    }
+
+    function getBlockRange(shape:BlockShape): BlockRange{
+        if(shape.length === 0) return {
+            maxX: 0, maxY: 0
+        }
+        const ranges = {
+            maxX: shape[0].x, maxY: shape[0].y,
+        }
+        for(let i = 1; i < shape.length; i++){
+            if(shape[i].x > ranges.maxX) ranges.maxX = shape[i].x;
+            if(shape[i].y > ranges.maxY) ranges.maxY = shape[i].y;
+        }
+        return ranges;
+    }
+    function isRangeFits(x:number, y:number, 
+        grid:DrawGrid2D<BlockElement>, range:BlockRange): boolean{
+            //console.log(x+range.maxX, y+range.maxY)
+        return grid.isInGrid(x+range.maxX, y+range.maxY);
+    }
+    
+    export function findCombo(grid:DrawGrid2D<BlockElement>, combo:BlockComboBlocks): BlockCombo[]{
+        const combos: BlockCombo[] = [];
+        for(let x = 0; x < grid.width - combo.range.maxX; ++x){
+            //let currentBlocks:BlockElement[] = [];
+            for(let y = grid.height - 1 - combo.range.maxY ; y >= 0; --y){
+                //if(isRangeFits(x, y, grid, combo.range)) continue;
+                let found = true;
+                const blocks = [];
+                for(const block of combo.blocks){
+                    const gridBlock = grid.getItem(x+block.x, y+block.y);
+                    if(!(gridBlock.type === block.id) || gridBlock.isDropping){
+                        found = false;
+                        break;
+                    }
+                    blocks.push(gridBlock);
+                }
+                if(found){
+                    const blockCombo = new BlockCombo(blocks);
+                    combos.push(blockCombo);
+                }
+            }
+        }
+        return combos;
+    }
+
+    export function drawCombo(cr:CanvasRenderingContext2D, combo:CBlock[], 
+        size: number, x:number, y: number){
+        for(const cb of combo){
+            const block = generateBlockFromId(cb.id);
+            block.draw(cr, size, new Point(x+cb.x*size, y+cb.y*size));
+            //cr.fillRect(x, y, size, size);
+        }
+    }
 
 }
 

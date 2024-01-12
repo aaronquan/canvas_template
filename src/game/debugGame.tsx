@@ -6,19 +6,20 @@ import ReactLogo from './../assets/react.svg';
 import { BlockInfo, DropBlockPickerInterface } from "./interface";
 
 import { BlockElement, BlockId, DroppingBlock, SolidBlock, generateBlockFromId } from "./blocks";
-import { RandomBlockDropper } from "./blockchain";
+//import { RandomBlockDropper } from "./blockchain";
 import { TimedEvent } from "../time/events";
 import { GameGrid } from "./game";
+import { generateRandomBlock } from "./blockchain";
 
 export class DebugGameGrid extends GameGrid{
-    blockDropper: RandomBlockDropper;
+    //blockDropper: RandomBlockDropper;
 
     blockPickInterface: DropBlockPickerInterface;
 
     constructor(){
         super();
 
-        this.blockDropper = new RandomBlockDropper();
+        //this.blockDropper = new RandomBlockDropper();
         this.blockPickInterface = new DropBlockPickerInterface(new Point(500, 100), 
         [BlockId.LiquidBlock, BlockId.DirtBlock, BlockId.SedimentBlock]);
     }
@@ -58,7 +59,7 @@ export class DebugGameGrid extends GameGrid{
             const rand = gridRange.getRandom();
             const newBlock = this.addNewBlock(rand, 0);
             if(newBlock && !this.controlledBlock){
-                this.controlledBlock = newBlock;
+                //this.controlledBlock = newBlock;
                 //console.log(this.controlledBlock);
             }
             if(!newBlock){
@@ -128,26 +129,27 @@ export class DebugGameGrid extends GameGrid{
     blockMoveRight(){
         this.blockMove(1);
     }
+    /*
     addNewBlock(x:number, y:number, block?:DroppingBlock):DroppingBlock | null{
         
         if(this.grid.getItem(x, y).isEmpty){
             //aconst newSolid = this.blockDropper.sedimentBlock(); 
             // drops sediment only
-            const newBlock = block ? block : this.blockDropper.randomBlock();
+            const newBlock = block ? block : generateRandomBlock();
             this.grid.setGrid(x, y, newBlock);
             this.solidBlocks.push(newBlock);
             //console.log('add block');
             return newBlock;
         }
         return null;
-    }
+    }*/
     blockTick(){
         for(const block of this.solidBlocks){
             block.update(this.grid);
         }
-        if(!this.controlledBlock?.isDropping){
-            this.controlledBlock = null;
-        }
+        //if(!this.controlledBlock?.isDropping){
+        //    this.controlledBlock = null;
+        //}
     }
     drawOverCell(cr:CanvasRenderingContext2D, pt: Point){
 

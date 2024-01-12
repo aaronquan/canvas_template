@@ -98,7 +98,7 @@ export class BlockElement implements Coordinate2DType{
         this.isControlling = false;
         this.isFloating = false;
         this.type = BlockId.Default;
-        this.value = 0;
+        this.value = 1;
         //BlockElement.colour = 'transparent';
     }
     getRelativeBlock(grid:DrawGrid2D<BlockElement>, x:number, y:number):BlockElement | null{

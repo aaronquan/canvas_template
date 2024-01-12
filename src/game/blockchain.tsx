@@ -1,11 +1,12 @@
 import { Point } from "../geometry/geometry";
 import { DrawGrid2D } from "../geometry/grid";
-import { randomArrayElement } from "../math/Random";
+import { Probabilities, randomArrayElement } from "../math/Random";
 import { BlockElement, BlockId, DirtBlock, DroppingBlock, 
     LiquidBlock, SedimentBlock, 
     StoneBlock, WoodBlock, 
     blockTextureFromId, 
     generateBlockFromId } from "./blocks";
+import { BlockPosition, allBlockShapes } from "./blockshapes";
 
 //focus block and has other blocks around
 //allows rotation
@@ -29,21 +30,42 @@ export class ControlledBlock{
         this.relativeX = rx;
         this.relativeY = ry;
     }
-    rotateClockwise(){
-        const tmpX = this.relativeX;
-        this.relativeX = this.relativeY;
-        this.relativeY = -tmpX;
+    canRotateClockwise(grid: DrawGrid2D<BlockElement>){
+        return this.checkNewSpaceFree(grid, this.x+this.relativeY, this.y-this.relativeX);
     }
-    rotateAntiClockwise(){
-        const tmpX = this.relativeX;
-        this.relativeX = -this.relativeY;
-        this.relativeY = tmpX;
+    canRotateAntiClockwise(grid: DrawGrid2D<BlockElement>){
+        return this.checkNewSpaceFree(grid, this.x-this.relativeY, this.y+this.relativeX);
+    }
+    rotateClockwise(grid: DrawGrid2D<BlockElement>):boolean{
+        if(!this.relativeX && !this.relativeY) return true;
+        //if(this.canRotateClockwise(grid)){
+            const tmpX = this.relativeX;
+            this.relativeX = this.relativeY
+            this.relativeY = -tmpX;
+            return true;
+        //}
+        //return false;
+    }
+    rotateAntiClockwise(grid: DrawGrid2D<BlockElement>){
+        if(!this.relativeX && !this.relativeY) return true;
+        //if(this.canRotateAntiClockwise(grid)){
+            const tmpX = this.relativeX;
+            this.relativeX = -this.relativeY
+            this.relativeY = tmpX;
+            return true;
+        //}
+        //return false;
     }
     getX(){
         return this.x+this.relativeX;
     }
     getY(){
         return this.y+this.relativeY;
+    }
+    checkNewSpaceFree(grid: DrawGrid2D<BlockElement>, nx:number, ny:number):boolean{
+        if(ny < 0 && grid.isInX(nx)) return true;
+        if(!grid.isInGrid(nx, ny)) return false;
+        return grid.getItem(nx, ny).getEmpty();
     }
     checkSpaceFree(grid: DrawGrid2D<BlockElement>, rx:number, ry:number):boolean{
         const x = this.getX()+rx; const y = this.getY()+ry;
@@ -98,22 +120,44 @@ export class ControlledBlockChain extends ControlledBlock{
             block.x = this.x; block.y = this.y;
         }
     }
-    rotateClockwise(): void {
-        for(const block of this.relativeBlocks) block.rotateClockwise();
+    rotateClockwise(grid: DrawGrid2D<BlockElement>): boolean {
+        let canRotate = true;
+        for(const block of this.relativeBlocks){
+            if(!block.canRotateClockwise(grid)){
+                canRotate = false;
+                break;
+            };
+        }
+        if(!canRotate) return false;
+        for(const block of this.relativeBlocks){
+            block.rotateClockwise(grid);
+        }
+        return true;
     }
-    rotateAntiClockwise(): void {
-        for(const block of this.relativeBlocks) block.rotateAntiClockwise();
+    rotateAntiClockwise(grid: DrawGrid2D<BlockElement>): boolean {
+        let canRotate = true;
+        for(const block of this.relativeBlocks){
+            if(!block.canRotateAntiClockwise(grid)){
+                canRotate = false;
+                break;
+            };
+        }
+        if(!canRotate) return false;
+        for(const block of this.relativeBlocks){
+            block.rotateAntiClockwise(grid);
+        }
+        return true;
     }
     checkSpaceFree(grid: DrawGrid2D<BlockElement>, rx:number, ry:number):boolean{
-        let boo = true;
+        let spaceFree = true;
         for(const block of this.relativeBlocks){
             if(!block.checkSpaceFree(grid, rx, ry)){
                 //console.log('?')
-                boo = false;
+                spaceFree = false;
                 break;
             }
         }
-        if(!boo) return boo;
+        if(!spaceFree) return spaceFree;
         return super.checkSpaceFree(grid, rx, ry);
     }
     move(grid: DrawGrid2D<BlockElement>, x:number, y:number):boolean{
@@ -156,10 +200,49 @@ export class ControlledBlockChain extends ControlledBlock{
     }
 }
 
+/*
 const controlledBlockTestArr = [
     [new ControlledBlock(0, BlockId.StoneBlock, 1, 0)]
 ]
 
+const blockProbabilities = new Map<BlockId, number>();
+blockProbabilities.set(BlockId.StoneBlock, 0.5);
+blockProbabilities.set(BlockId.WoodBlock, 0.5);
+*/
+
+/*
+//export function generateRandomBlocks(probabilities:BlockProbabilities){
+export function generateRandomBlocks(x:number, nShape:number):ControlledBlockChain{
+    //todo
+    //randomArrayElement(blockShapes1)
+    const shapePool = allBlockShapes[nShape];
+    const shape = randomArrayElement(blockShapes1);
+    const relativeBlocks = shape?.map((s:BlockPosition) => {
+        return new ControlledBlock(x, getRandomBlockType(), s.x, s.y)
+    });
+    return new ControlledBlockChain(x, getRandomBlockType(), relativeBlocks);
+}
+
+export function getRandomBlockType():BlockId{
+    let cr = 0;
+    const r = Math.random();
+    const blockId: BlockId | null = [...blockProbabilities.entries()].reduce(
+        (bid: BlockId | null, [id, prob]) => {
+        if(bid !== null) return bid;
+        cr += prob;
+        if(r < cr){
+            bid = id;
+        }
+        return bid;
+    }, null);
+    return blockId === null ? 0 : blockId;
+}*/
+
+export function generateRandomBlock():DroppingBlock{
+    const blockId = randomArrayElement(DroppingBlockIds);
+    if(blockId) return generateBlockFromId(blockId);
+    return new StoneBlock();
+}
 
 const DroppingBlockIds = [
     BlockId.StoneBlock,
@@ -169,33 +252,47 @@ const DroppingBlockIds = [
     //BlockId.LiquidBlock
 ];
 
-export class RandomBlockDropper{
+export class RandomBlockGenerator{
+    shapeProbabilities: Probabilities<number>;
+    blockProbabilities: Probabilities<BlockId>;
     constructor(){
-
+        this.shapeProbabilities = new Probabilities<number>();
+        this.blockProbabilities = new Probabilities<BlockId>();
     }
-    sedimentBlock():SedimentBlock{
-        return new SedimentBlock();
-    }
-    randomBlock():DroppingBlock{
-        const blockId = randomArrayElement(DroppingBlockIds);
-        if(blockId) return generateBlockFromId(blockId);
-        return new StoneBlock();
-        /*
-        switch(blockId){
-            case BlockId.StoneBlock:
-                return new StoneBlock();
-            case BlockId.DirtBlock:
-                return new DirtBlock();
-            case BlockId.WoodBlock:
-                return new WoodBlock();
-            case BlockId.SedimentBlock:
-                return new SedimentBlock();
-            case BlockId.LiquidBlock:
-                return new LiquidBlock();
-            default:
-                console.log('Block not found')
+    addShapeProbability(shapeN:number, prob:number, fromShapeN:number|null=null){
+        if(!this.shapeProbabilities.has(shapeN)){
+            this.shapeProbabilities.addProbability(shapeN);
         }
-        return new StoneBlock();
-        */
+        this.shapeProbabilities.changeProbability(shapeN, prob, fromShapeN);
+    }
+    addBlockProbability(blockId:number, prob:number, fromBlockId:number|null=null){
+        if(!this.blockProbabilities.has(blockId)){
+            this.blockProbabilities.addProbability(blockId);
+        }
+        this.blockProbabilities.changeProbability(blockId, prob, fromBlockId);
+    }
+    randomBlockType():BlockId{
+        const type = this.blockProbabilities.roll();
+        if(!type) return BlockId.StoneBlock;
+        return type;
+    }
+    randomShape(){
+        const nShape = this.shapeProbabilities.roll();
+        if(!nShape) return randomArrayElement(allBlockShapes[0]);
+        return randomArrayElement(allBlockShapes[nShape]);
+    }
+
+    generateRandomBlocks(x:number):ControlledBlockChain{
+        const shape = this.randomShape();
+        //console.log(this.shapeProbabilities);
+        //console.log(shape);
+        const relativeBlocks = shape?.map((s:BlockPosition) => {
+            return new ControlledBlock(x, this.randomBlockType(), s.x, s.y)
+        });
+        return new ControlledBlockChain(x, this.randomBlockType(), relativeBlocks);
+    }
+
+    getProbabilities(){
+
     }
 }
