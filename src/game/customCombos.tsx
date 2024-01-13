@@ -2,7 +2,7 @@ import { Point } from "../geometry/geometry";
 import { DrawGrid2D } from "../geometry/grid";
 import { Probabilities, randomArrayElement } from "../math/Random";
 import { BlockElement, BlockId, generateBlockFromId } from "./blocks";
-import { BlockShape, comboShape } from "./blockshapes";
+import { BlockShape, comboShape3, comboShape4, comboShape5, comboShape6 } from "./blockshapes";
 import { BlockCombo, CombineCombo } from "./combo";
 
 //interface ComboFunction
@@ -158,8 +158,27 @@ export namespace BlockCombos{
         y: number;
         id: BlockId;
     }
-    export function generateCombo(blockProbabilities:Probabilities<BlockId>):BlockComboBlocks{
-        const shape:BlockShape | null = randomArrayElement(comboShape);
+    export function generateCombo(blockProbabilities:Probabilities<BlockId>, shapeFind:number=0):BlockComboBlocks{
+        let shapeArray = [];
+        switch(shapeFind){
+            case 3:
+                shapeArray = comboShape3;
+                break;
+            case 4:
+                shapeArray = comboShape4;
+                break;
+            case 5:
+                shapeArray = comboShape5;
+                break;
+            case 6:
+                shapeArray = comboShape6;
+                break;
+            default:
+                shapeArray = comboShape3;
+                break;
+        }
+        //console.log(shapeArray);
+        const shape:BlockShape | null = randomArrayElement(shapeArray);
         if(shape){
             const range = getBlockRange(shape);
             const combo:CBlock[] = shape?.map((pos) => {
@@ -190,16 +209,13 @@ export namespace BlockCombos{
     }
     function isRangeFits(x:number, y:number, 
         grid:DrawGrid2D<BlockElement>, range:BlockRange): boolean{
-            //console.log(x+range.maxX, y+range.maxY)
         return grid.isInGrid(x+range.maxX, y+range.maxY);
     }
     
     export function findCombo(grid:DrawGrid2D<BlockElement>, combo:BlockComboBlocks): BlockCombo[]{
         const combos: BlockCombo[] = [];
         for(let x = 0; x < grid.width - combo.range.maxX; ++x){
-            //let currentBlocks:BlockElement[] = [];
             for(let y = grid.height - 1 - combo.range.maxY ; y >= 0; --y){
-                //if(isRangeFits(x, y, grid, combo.range)) continue;
                 let found = true;
                 const blocks = [];
                 for(const block of combo.blocks){
@@ -224,7 +240,6 @@ export namespace BlockCombos{
         for(const cb of combo){
             const block = generateBlockFromId(cb.id);
             block.draw(cr, size, new Point(x+cb.x*size, y+cb.y*size));
-            //cr.fillRect(x, y, size, size);
         }
     }
 

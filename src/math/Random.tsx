@@ -47,7 +47,6 @@ export class Probabilities<T>{
             }
         }else{
             // add probabilities remaining -> k
-            console.log(value);
             if(this.remaining === 0) return false;
             const change = value > this.remaining ? this.remaining : value;
             this.probabilities.set(k, kProb+change);

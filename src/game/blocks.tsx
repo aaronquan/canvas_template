@@ -4,6 +4,8 @@ import { BlockParticles } from "../graphics/customParticle";
 import { ParticleEffect } from "../graphics/particle";
 
 
+export const blockSize = 32;
+
 export enum BlockId {
     Default, SedimentBlock, LiquidBlock,
     AirBlock, 

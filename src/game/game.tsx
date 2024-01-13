@@ -3,9 +3,9 @@ import { Coordinate2DType, DrawGrid2D, VirtualGrid2D } from "../geometry/grid";
 import { VirtRect } from "../geometry/shapes";
 
 import ReactLogo from './../assets/react.svg';
-import { BlockInfo, BlockProbabilityInterface, DropBlockPickerInterface, InterfaceBox, PauseMenu, ShapeProbabilityInterface } from "./interface";
+import { AbilityInterface, BlockInfo, BlockProbabilityInterface, ComboChooseInterface, ComboEngineInterface, ComboItemInterface, DropBlockPickerInterface, InterfaceBox, PauseMenu, ShapeProbabilityInterface, ShopInterface } from "./interface";
 
-import { BlockElement, BlockId, DroppingBlock, SolidBlock, generateBlockFromId } from "./blocks";
+import { BlockElement, BlockId, DroppingBlock, SolidBlock, blockSize, generateBlockFromId } from "./blocks";
 import { ControlledBlock,  RandomBlockGenerator, generateRandomBlock} from "./blockchain";
 import { TimedEvent } from "../time/events";
 import { CanvasScreen } from "../Canvas/Screen";
@@ -15,12 +15,22 @@ import { GravityParticleEffect, ParticleEffect, ParticleEngine } from "../graphi
 import { getRandomInteger, getRandomRanges } from "../math/Random";
 import CustomBlockCombos, { BlockCombos } from "./customCombos";
 import { BlockLevelManager, level1Function } from "./level";
+import { CustomText } from "../graphics/customText";
+import { DrawText } from "../graphics/text";
+import { ShopRandomiser } from "./shop";
 
 
 export class GameCanvas implements CanvasScreen{
     gameGrid: GameGrid;
+    background: null;
+    quit: VirtRect;
+    quitText: DrawText;
+    onClickQuit: () => void;
     constructor(){
         this.gameGrid = new GameGrid();
+        this.quit = new VirtRect(0, 0, 60, 30);
+        this.quitText = new DrawText('Quit', new Point(), 15, undefined, 'white');
+        this.onClickQuit = () => {};
     }
     update(time:number){
         this.gameGrid.update(time);
@@ -34,6 +44,9 @@ export class GameCanvas implements CanvasScreen{
     }
     mouseLeftDown(e: MouseEvent<HTMLCanvasElement>, pos: Point): void {
         this.gameGrid.mouseLeftDown(e, pos);
+        if(this.quit.hitPoint(pos)){
+            this.onClickQuit();
+        }
     }
     mouseLeftUp(e: MouseEvent<HTMLCanvasElement>, pos: Point): void {
         this.gameGrid.mouseLeftUp(e, pos);
@@ -52,9 +65,14 @@ export class GameCanvas implements CanvasScreen{
     }
     draw(cr: CanvasRenderingContext2D): void {
         this.gameGrid.draw(cr);
+        cr.fillStyle = 'black';
+        this.quit.fill(cr);
+        this.quitText.draw(cr);
     }
     resize(winX: number, winY: number): void {
         this.gameGrid.resize(winX, winY);
+        this.quit.moveTo(new Point(winX-80, 40));
+        this.quitText.textPoint = new Point(this.quit.left+15, this.quit.top+this.quit.height/2);
     }
 }
 
@@ -82,7 +100,9 @@ export class GameGrid{
     blockSpawnEvent: TimedEvent;
     blockTickEvent: TimedEvent;
     dropTickEvent: TimedEvent;
-    dropTickTime: number
+    dropTickTime: number;
+
+    halfSecondEvent:TimedEvent;
 
     comboPauseTimer: TimedEvent | null;
 
@@ -101,9 +121,12 @@ export class GameGrid{
     //0 - shapeProbabilityInterface, 1 - blockProbabilityInterface
 
     comboEngine: BlockComboEngine;
+    comboEngineInterface: ComboEngineInterface;
 
     particleEngine: ParticleEngine;
     screenShake: Point;
+
+    animatedTexts: CustomText.AnimatedText[];
 
     isPaused: boolean;
     pauseMenu: PauseMenu;
@@ -111,7 +134,14 @@ export class GameGrid{
     levelManager: BlockLevelManager;
     controlledBlockGenerator: RandomBlockGenerator;
 
-    testCombo: BlockCombos.BlockComboBlocks;
+    comboChooseInterface: ComboChooseInterface;
+
+    //testCombo: BlockCombos.BlockComboBlocks;
+
+    abilityBarInterface: AbilityInterface;
+    
+    shopRandom: ShopRandomiser;
+    shopInterface: ShopInterface;
 
     static gridSize = 32;
 
@@ -131,7 +161,9 @@ export class GameGrid{
         this.blockSpawnEvent = new TimedEvent(2000);
         this.dropTickTime = 500;
         this.dropTickEvent = new TimedEvent(this.dropTickTime);
-        this.blockTickEvent = new TimedEvent(32);
+        this.blockTickEvent = new TimedEvent(64);
+
+        this.halfSecondEvent = new TimedEvent(500);
 
         this.comboPauseTimer = null;
 
@@ -146,6 +178,10 @@ export class GameGrid{
         [BlockId.WaterBlock, BlockId.DirtBlock, BlockId.SandBlock, BlockId.StoneBlock, BlockId.MegaStoneBlock]);
 
         this.comboEngine = new BlockComboEngine();
+        this.comboEngineInterface = new ComboEngineInterface(this.comboEngine);
+
+        this.comboChooseInterface = new ComboChooseInterface(new Point(100, 100), 600, 400);
+        this.comboChooseInterface.active = false;
         /*
         const testCombo:ComboFunction = CustomBlockCombos.findNHorizontalCombo
         this.comboEngine.addComboFunction(testCombo, [3, BlockId.WaterBlock]);
@@ -161,14 +197,15 @@ export class GameGrid{
         //this.comboCount = 0;
         //this.particles = [];
         this.particleEngine = new ParticleEngine();
-        this.isPaused = false;
+        this.animatedTexts = [];
 
         this.screenShake = new Point(0, 0);
+        this.isPaused = false;
         this.pauseMenu = new PauseMenu();
 
         this.levelManager = new BlockLevelManager();
         this.controlledBlockGenerator = new RandomBlockGenerator();
-        this.levelManager.initLevel0(this.controlledBlockGenerator);
+        this.levelManager.initLevel0(this.controlledBlockGenerator, this.comboChooseInterface);
 
         this.controlledBlock = this.spawnControllingBlock(); // starts the spawning of blocks
 
@@ -180,8 +217,9 @@ export class GameGrid{
         this.shapeProbabilityInterface.setData(this.controlledBlockGenerator.shapeProbabilities.asList());
         this.blockProbabilityInterface.setData(this.controlledBlockGenerator.blockProbabilities.asList());
 
-
-        this.testCombo = BlockCombos.newBlockComboBlocks();
+        this.shopRandom = new ShopRandomiser();
+        this.shopInterface = new ShopInterface();
+        //this.testCombo = BlockCombos.newBlockComboBlocks();
     }
     resize(winX: number, winY: number){
         this.width = winX;
@@ -193,10 +231,15 @@ export class GameGrid{
         const spawnHeight = 3*GameGrid.gridSize;
         this.spawnArea = new VirtRect(halfScreenWidth-halfGridWidth, this.depth-spawnHeight, this.grid.getDrawWidth(), spawnHeight);
         this.blockPickInterface.moveTo(new Point(halfScreenWidth+halfGridWidth+20, this.depth));
-        this.blockInfo?.moveTo(new Point(halfScreenWidth+halfGridWidth+20, this.depth+100))
+        this.blockInfo?.moveTo(new Point(halfScreenWidth+halfGridWidth+20, this.depth+this.grid.getDrawHeight()-200))
+        this.comboEngineInterface.moveTo(new Point(halfScreenWidth+halfGridWidth+20, this.depth));
 
-        this.interfaces.get('shapeProbability')?.moveTo(new Point(halfScreenWidth-halfGridWidth - 150, this.depth));
-        this.interfaces.get('blockProbability')?.moveTo(new Point(halfScreenWidth-halfGridWidth - 150, this.depth + 250));
+        this.interfaces.get('shapeProbability')?.moveTo(new Point(halfScreenWidth-halfGridWidth - 120, this.depth));
+        this.interfaces.get('blockProbability')?.moveTo(new Point(halfScreenWidth-halfGridWidth - 120, this.depth + 220));
+        this.comboChooseInterface.centre(this.width, this.height);
+        
+        this.shopInterface.moveTo(new Point(halfScreenWidth-halfGridWidth - 240, this.depth + this.grid.getDrawHeight() - 140));
+
     }
     updateGrid(){
         const blocks = [];
@@ -255,26 +298,52 @@ export class GameGrid{
         this.comboEngine.findCombos(this.grid);
 
     }
+    executeCombos(){
+        const comboEffects = this.comboEngine.execute(this.grid);
+        this.particleEngine.addParticles(comboEffects.particleEffects);
+        const countPoints = comboEffects.pointEffects.reduce((pts:number, pe:PointEffect) => {
+            return pts + pe.value;
+        }, 0);
+
+        const animTexts = [];
+        for(const effect of comboEffects.pointEffects){
+            const newText = CustomText.newAnimatedText(effect.position, 
+                effect.value.toString(), 'white', 20
+            )
+            newText.sizeChange = 0.01;
+            newText.maxLifetime = 1000;
+            newText.vx = Math.random()*0.01;
+            newText.vy = Math.random()*0.01;
+            animTexts.push(newText);
+        }
+        this.animatedTexts.push(...animTexts);
+
+        const levelRet = this.levelManager.addPoints(countPoints, 
+            this.controlledBlockGenerator, this.comboChooseInterface, this.comboEngine);
+        
+
+        if(levelRet.levelUp){
+            //level up
+            const levelUpText = CustomText.newAnimatedText(new Point((this.width/2)-20, (this.height/2)-10), 'LEVEL UP!', 'white', 30);
+            levelUpText.maxLifetime = 4000;
+            this.animatedTexts.push(levelUpText);
+            this.comboEngineInterface.newCombos = true;
+            
+            this.blockProbabilityInterface.setData(this.controlledBlockGenerator.blockProbabilities.asList());
+            this.shapeProbabilityInterface.setData(this.controlledBlockGenerator.shapeProbabilities.asList());
+        }
+
+        this.comboPauseTimer = new TimedEvent(250);
+    }
     update(time:number){
-        if(!this.isPaused){
+        if(!this.isPaused && !this.comboChooseInterface.active){
             if(!this.comboPauseTimer){
                 if(!this.comboEngine.hasCombos()){
                     this.updateBlocks(time);
                     //this.spawnBlockUpdate(time);
                 }else{
                     //run combo
-                    const comboEffects = this.comboEngine.execute(this.grid);
-                    this.particleEngine.addParticles(comboEffects.particleEffects);
-                    const countPoints = comboEffects.pointEffects.reduce((pts:number, pe:PointEffect) => {
-                        return pts + pe.value;
-                    }, 0);
-                    const levelRet = this.levelManager.addPoints(countPoints, this.controlledBlockGenerator);
-                    //if(levelRet.
-                    //change this
-                    this.blockProbabilityInterface.setData(this.controlledBlockGenerator.blockProbabilities.asList());
-                    this.shapeProbabilityInterface.setData(this.controlledBlockGenerator.shapeProbabilities.asList());
-
-                    this.comboPauseTimer = new TimedEvent(250);
+                    this.executeCombos();
                 }
             }else{
                 this.screenShake = new Point(getRandomRanges(0, 5), getRandomRanges(0, 5));
@@ -286,6 +355,7 @@ export class GameGrid{
             }
 
             this.particleEngine.update(time);
+            CustomText.updateAnimatedTexts(time, this.animatedTexts);
 
 
             if(this.mouseHighlightedCell){
@@ -294,16 +364,18 @@ export class GameGrid{
             }else{
                 this.blockInfo?.noInfo();
             }
+
+            const hs = this.halfSecondEvent.step(time);
+            if(hs){
+                this.comboEngineInterface.flicker();
+            }
         }
     }
     spawnControllingBlock(): ControlledBlock{
         const gridRange = this.grid.getWidthRange();
         gridRange.setMax(gridRange.max-1);
+        gridRange.setMin(gridRange.min+1);
         const rand = gridRange.getRandom();
-        //const newBlock = new ControlledBlockChain(rand, BlockId.StoneBlock, 
-        //    [new ControlledBlock(0, BlockId.StoneBlock, 1, 0)]);
-        const nBlocks = 0;
-        //const newBlock = generateRandomBlocks(rand, 0);
         const newBlock = this.controlledBlockGenerator.generateRandomBlocks(rand);
         return newBlock;
     }
@@ -315,9 +387,6 @@ export class GameGrid{
         const newBlock = this.addNewBlock(rand, 0);
         if(newBlock && !this.controlledBlock){
             return newBlock;
-            //this.controlledBlock.isControlling = true;
-            //this.controlledBlock.isDropping = true;
-            //console.log(this.controlledBlock);
         }
         if(!newBlock){
             console.log('you lost block cannot be placed');
@@ -337,18 +406,43 @@ export class GameGrid{
     }
     mouseLeftDown(e:React.MouseEvent<HTMLCanvasElement>, pos:Point){
         //console.log(pos);
-        if(!this.isPaused){
+        if(!this.isPaused && !this.comboChooseInterface.active){
+            /*
             if(this.mouseHighlightedCell){
                 const block = generateBlockFromId(this.blockPickInterface.picked);
                 this.addNewBlock(this.mouseHighlightedCell.x, this.mouseHighlightedCell.y, block);
             }
-            this.blockPickInterface.mouseDown(pos);
+            */
+            //this.blockPickInterface.mouseDown(pos); //disable block pick interface
+            const ceiRet = this.comboEngineInterface.isClicked(pos);
+            if(ceiRet.pickComboInterface){
+                this.comboChooseInterface.active = true;
+                this.comboEngineInterface.newCombos = false;
+                //console.log(this.comboEngine.randomCombos);
+            }
         }else{
             const mods = this.pauseMenu.mouseDown(pos);
             if(mods){
                 if(mods.unpause) this.isPaused = false;
             }
         }
+
+        if(this.comboChooseInterface.active){
+            const ret = this.comboChooseInterface.isClicked(pos);
+            if(ret !== null){
+                //console.log(ret);
+                for(const combo of ret){
+                    this.comboEngine.addRandomCombos(combo);
+                    this.comboEngineInterface.addCombo(combo);
+                }
+                this.comboChooseInterface.active = false;
+                this.comboChooseInterface.changeNeedSelected(1);
+            };
+        }
+        if(this.abilityBarInterface){
+
+        }
+
     }
     mouseLeftUp(e:React.MouseEvent<HTMLCanvasElement>, pos:Point){
 
@@ -358,6 +452,8 @@ export class GameGrid{
         if(this.mouseHighlightedCell){
             this.grid.setGrid(this.mouseHighlightedCell?.x, this.mouseHighlightedCell.y, new BlockElement());
         }
+        this.comboChooseInterface.isClicked(pos);
+        //if(this.comboChooseInterface.)
     }
     mouseRightUp(e:React.MouseEvent<HTMLCanvasElement>, pos:Point){
 
@@ -381,11 +477,16 @@ export class GameGrid{
                 this.controlledBlock?.rotateAntiClockwise(this.grid);
                 break;
             case 'z':
-
+                //adds random combo
+                /*
                 const combo = BlockCombos.generateCombo(this.controlledBlockGenerator.blockProbabilities);
                 console.log(combo);
                 this.testCombo = combo;
                 this.comboEngine.addRandomCombos(combo);
+                */
+
+                //const comboItem = new ComboItemInterface(new Point(10, 10), combo);
+                //this.comboChooseInterface.items = items;
                 //this.comboEngine.
                 break;
             case ' ':
@@ -459,9 +560,9 @@ export class GameGrid{
         cr.translate(this.screenShake.x, this.screenShake.y);
 
         cr.fillStyle = 'black';
-        cr.fillText('Points: '+this.levelManager.points, 10, 25);
-        cr.fillText('Level: '+this.levelManager.level, 10, 50);
-        cr.fillText('Coins: '+this.levelManager.coins, 10, 75);
+        cr.fillText('Points: '+this.levelManager.points, 20, 25);
+        cr.fillText('Level: '+this.levelManager.level, 20, 50);
+        cr.fillText('Coins: '+this.levelManager.coins, 20, 75);
 
         cr.fillStyle = 'black';
         this.spawnArea.fill(cr);
@@ -485,7 +586,7 @@ export class GameGrid{
         }
 
         if(this.blockInfo) this.blockInfo.draw(cr);
-        this.blockPickInterface.draw(cr);
+        //this.blockPickInterface.draw(cr);
         /*
         for(const particle of this.particles){
             particle.draw(cr);
@@ -493,22 +594,23 @@ export class GameGrid{
         */
         this.particleEngine.draw(cr);
 
-        if(this.isPaused) this.pauseMenu.draw(cr, this.width, this.height);
+        if(this.isPaused && !this.comboChooseInterface.active) this.pauseMenu.draw(cr, this.width, this.height);
 
         for(const [_id, inter] of this.interfaces){
             inter.draw(cr);
         }
 
-        this.comboEngine.drawCombos(cr, (this.width/2)+(this.grid.getDrawWidth()/2)+10, 
-        this.grid.position.y+300);
-        /*
-        let y = 0;
-        const blockSize = 15;
-        for(const combo of this.comboEngine.randomCombos){
-            BlockCombos.drawCombo(cr, combo.blocks, blockSize, 10, 10+y);
-            console.log(combo.range.maxY);
-            y += (combo.range.maxY+1)*blockSize + 10;
-        }*/
+        //draw custom combos that player can make on screen
+        //this.comboEngine.drawCombos(cr, (this.width/2)+(this.grid.getDrawWidth()/2)+10, 
+        //this.grid.position.y+300);
+        this.comboEngineInterface.draw(cr);
+        
+        CustomText.drawAnimatedTexts(cr, this.animatedTexts);
+
+        this.shopInterface.draw(cr);
+
+        this.comboChooseInterface.draw(cr, this.width, this.height);
+        //console.log(this.comboChooseInterface.active = );
 
         cr.resetTransform();
         /*

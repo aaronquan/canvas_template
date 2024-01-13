@@ -123,6 +123,9 @@ export class DrawGrid2D<Type extends Coordinate2DType> extends VirtualCoordinate
     getDrawWidth():number{
        return this.gridSize*this.width; 
     }
+    getDrawHeight():number{
+        return this.gridSize*this.height; 
+     }
     swapGrid(i:number, j:number, x:number, y:number){
         this.getItem(i, j).newCoordinates(x, y);
         this.getItem(x, y).newCoordinates(i, j);

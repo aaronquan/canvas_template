@@ -6,9 +6,10 @@ class BaseText{
     font: string;
     size: number; //in px
     colour: string;
+    static font = 'Courier New';
     constructor(text:string, size?:number, font?:string, colour?:string){
         this.text = text;
-        this.font = font ? font : 'Arial'
+        this.font = font ? font : 'Courier New'
         this.size = size ? size : 12;
         this.colour = colour ? colour : 'white';
     }
@@ -27,6 +28,14 @@ export class DrawText extends BaseText{
         //console.log(cr.measureText(this.text));
         cr.fillStyle = this.colour;
         cr.fillText(this.text, this.textPoint.x, this.textPoint.y);
+    }
+    drawCentre(cr:CanvasRenderingContext2D):void{
+        cr.font = this.size.toString()+'px '+this.font;
+        const metrics = cr.measureText(this.text);
+        const x = this.textPoint.x - (metrics.width/2);
+        const y = this.textPoint.y + (this.size/2);
+        cr.fillStyle = this.colour;
+        cr.fillText(this.text, x, y);
     }
 }
 

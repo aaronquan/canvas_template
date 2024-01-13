@@ -29,6 +29,15 @@ export class VirtRect implements VirtShape{
         this.cx = this.left + (wid / 2);
         this.cy = this.top + (hei / 2);
     }
+    changeDimensions(w:number, h:number){
+        this.width = w;
+        this.height = h;
+        this.right = this.left+this.width;
+        this.bottom = this.top+this.height;
+
+        this.cx = this.left + (this.width / 2);
+        this.cy = this.top + (this.height / 2);
+    }
     move(mo:Point){
         this.left += mo.x;
         this.right += mo.x;
