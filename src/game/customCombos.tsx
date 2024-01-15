@@ -194,7 +194,7 @@ export namespace BlockCombos{
         return newBlockComboBlocks();
     }
 
-    function getBlockRange(shape:BlockShape): BlockRange{
+    export function getBlockRange(shape:BlockShape): BlockRange{
         if(shape.length === 0) return {
             maxX: 0, maxY: 0
         }

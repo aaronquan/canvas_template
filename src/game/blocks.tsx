@@ -2,6 +2,7 @@ import { Point } from "../geometry/geometry";
 import { Coordinate2DType, DrawGrid2D } from "../geometry/grid";
 import { BlockParticles } from "../graphics/customParticle";
 import { ParticleEffect } from "../graphics/particle";
+//import { ABlock } from "./customBlocks";
 
 
 export const blockSize = 32;
@@ -12,7 +13,9 @@ export enum BlockId {
     StoneBlock, DirtBlock, WoodBlock, 
     MegaStoneBlock,
     WaterBlock, SandBlock,
-    WetSoilBlock
+    WetSoilBlock, 
+    
+    ABlock, FloatBlock, SprinkleBlock
 }
 
 export const blockTypeStrings = {
@@ -26,7 +29,11 @@ export const blockTypeStrings = {
     [BlockId.AirBlock]: 'Air',
     [BlockId.SandBlock]: 'Sand',
     [BlockId.WaterBlock]: 'Water',
-    [BlockId.WetSoilBlock]: 'Wet Soil'
+    [BlockId.WetSoilBlock]: 'Wet Soil',
+
+    [BlockId.ABlock]: 'WBlock',
+    [BlockId.FloatBlock]: 'Floater',
+    [BlockId.SprinkleBlock]: 'Sprinkle'
 }
 
 export function generateBlockFromId(blockId: BlockId): DroppingBlock{
@@ -45,6 +52,12 @@ export function generateBlockFromId(blockId: BlockId): DroppingBlock{
             return new MegaStoneBlock();
         case BlockId.WetSoilBlock:
             return new WetSoilBlock();
+        case BlockId.ABlock:
+            return new ABlock();
+        case BlockId.FloatBlock:
+            return new FloatBlock();
+        case BlockId.SprinkleBlock:
+            return new SprinkleBlock();
         default:
             console.log('Block not found')
     }
@@ -67,6 +80,12 @@ export function blockTextureFromId(blockId: BlockId): string | CanvasPattern{
             return MegaStoneBlock.colour;
         case BlockId.WetSoilBlock:
             return WetSoilBlock.colour;
+        case BlockId.ABlock:
+            return ABlock.colour;
+        case BlockId.SprinkleBlock:
+            return SprinkleBlock.colour;
+        case BlockId.FloatBlock:
+            return FloatBlock.colour;
         default:
             console.log('Block not found')
     }
@@ -79,6 +98,7 @@ export class BlockElement implements Coordinate2DType{
     isEmpty: boolean;
     isSolid: boolean;
     isLiquid: boolean;
+    isSand: boolean;
     isFloating: boolean;
     //isFalling: boolean; 
     //falling means block is not user controlled and is still in motion
@@ -95,6 +115,7 @@ export class BlockElement implements Coordinate2DType{
         this.isEmpty = true;
         this.isSolid = false;
         this.isLiquid = false;
+        this.isSand = false;
         //this.isFalling = false;
         this.isDropping = true;
         this.isControlling = false;
@@ -136,7 +157,6 @@ export class BlockElement implements Coordinate2DType{
         */
     }
 }
-
 export class AirBlock extends BlockElement{
     constructor(x?:number, y?:number){
         super(x, y);
@@ -226,7 +246,7 @@ export class WoodBlock extends SolidBlock{
     constructor(x?:number, y?:number){
         super(x, y);
         this.type = BlockId.WoodBlock;
-        WoodBlock.colour = 'grey';
+        //WoodBlock.colour = 'grey';
     }
     getColour():string | CanvasPattern{
         return WoodBlock.colour;
@@ -308,6 +328,7 @@ export class SedimentBlock extends DroppingBlock{
     constructor(x?:number, y?:number){
         super(x, y);
         this.isSolid = true;
+        this.isSand = true;
         this.type = BlockId.SedimentBlock;
     }
     getDestroyParticles(grid: DrawGrid2D<BlockElement>): ParticleEffect[] {
@@ -539,5 +560,46 @@ export class WaterBlock extends LiquidBlock{
     }
     getColour(): string | CanvasPattern{
         return WaterBlock.colour;
+    }
+}
+
+export class ABlock extends SolidBlock{
+    static colour:string | CanvasPattern = 'red';
+    constructor(x?:number, y?:number){
+        super(x, y);
+        this.type = BlockId.ABlock;
+        //BlockElement.colour = 'white';
+    }
+    getColour():string | CanvasPattern{
+        return ABlock.colour;
+    }
+}
+
+export class SprinkleBlock extends SedimentBlock{
+    static colour:string | CanvasPattern = 'red';
+    constructor(x?:number, y?:number){
+        super(x, y);
+        this.type = BlockId.SprinkleBlock;
+        //BlockElement.colour = 'white';
+    }
+    getColour():string | CanvasPattern{
+        return SprinkleBlock.colour;
+    }
+}
+
+export class FloatBlock extends SolidBlock{
+    static colour:string | CanvasPattern = 'red';
+    constructor(x?:number, y?:number){
+        super(x, y);
+        this.type = BlockId.FloatBlock;
+        this.isFloating = true;
+        this.isDropping = false;
+        //BlockElement.colour = 'white';
+    }
+    update(grid:DrawGrid2D<BlockElement>){
+
+    }
+    getColour():string | CanvasPattern{
+        return FloatBlock.colour;
     }
 }

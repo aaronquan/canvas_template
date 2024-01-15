@@ -3,9 +3,9 @@ import { Coordinate2DType, DrawGrid2D, VirtualGrid2D } from "../geometry/grid";
 import { VirtRect } from "../geometry/shapes";
 
 import ReactLogo from './../assets/react.svg';
-import { AbilityInterface, BlockInfo, BlockProbabilityInterface, ComboChooseInterface, ComboEngineInterface, ComboItemInterface, DropBlockPickerInterface, InterfaceBox, PauseMenu, ShapeProbabilityInterface, ShopInterface } from "./interface";
+import { AbilityInterface, AbilityItem, BlockInfo, BlockProbabilityInterface, ComboChooseInterface, ComboEngineInterface, ComboItemInterface, DropBlockPickerInterface, InterfaceBox, MouseOverInterface, PauseMenu, ShapeProbabilityInterface, ShopInterface } from "./interface";
 
-import { BlockElement, BlockId, DroppingBlock, SolidBlock, blockSize, generateBlockFromId } from "./blocks";
+import { BlockElement, BlockId, DroppingBlock, SolidBlock, blockSize, blockTypeStrings, generateBlockFromId } from "./blocks";
 import { ControlledBlock,  RandomBlockGenerator, generateRandomBlock} from "./blockchain";
 import { TimedEvent } from "../time/events";
 import { CanvasScreen } from "../Canvas/Screen";
@@ -18,6 +18,8 @@ import { BlockLevelManager, level1Function } from "./level";
 import { CustomText } from "../graphics/customText";
 import { DrawText } from "../graphics/text";
 import { ShopRandomiser } from "./shop";
+import { AbilityManager } from "./ability";
+import { drawBackground } from "./background";
 
 
 export class GameCanvas implements CanvasScreen{
@@ -142,6 +144,13 @@ export class GameGrid{
     
     shopRandom: ShopRandomiser;
     shopInterface: ShopInterface;
+    mouseOverInterface: MouseOverInterface;
+    abilityManager: AbilityManager;
+
+    chosenAbility: AbilityItem | undefined;
+
+    mousePoint: Point;
+    gameOver: boolean;
 
     static gridSize = 32;
 
@@ -202,10 +211,7 @@ export class GameGrid{
         this.screenShake = new Point(0, 0);
         this.isPaused = false;
         this.pauseMenu = new PauseMenu();
-
-        this.levelManager = new BlockLevelManager();
         this.controlledBlockGenerator = new RandomBlockGenerator();
-        this.levelManager.initLevel0(this.controlledBlockGenerator, this.comboChooseInterface);
 
         this.controlledBlock = this.spawnControllingBlock(); // starts the spawning of blocks
 
@@ -220,6 +226,18 @@ export class GameGrid{
         this.shopRandom = new ShopRandomiser();
         this.shopInterface = new ShopInterface();
         //this.testCombo = BlockCombos.newBlockComboBlocks();
+        this.abilityBarInterface = new AbilityInterface();
+        this.mouseOverInterface = new MouseOverInterface();
+        this.abilityManager = new AbilityManager();
+        //this.chosenAbility = undefined;
+
+        this.mousePoint = new Point();
+
+        this.levelManager = new BlockLevelManager();
+        this.levelManager.initLevel0(this);
+
+        this.gameOver = false;
+        
     }
     resize(winX: number, winY: number){
         this.width = winX;
@@ -240,6 +258,8 @@ export class GameGrid{
         
         this.shopInterface.moveTo(new Point(halfScreenWidth-halfGridWidth - 240, this.depth + this.grid.getDrawHeight() - 140));
 
+
+        this.abilityBarInterface.moveTo(new Point(halfScreenWidth-halfGridWidth, this.depth + this.grid.getDrawHeight() + 5));
     }
     updateGrid(){
         const blocks = [];
@@ -261,36 +281,51 @@ export class GameGrid{
         this.comboEngine.addCombos(vertStoneCombo);
         return combos;
     }*/
+    gameOverFunction(){
+        this.gameOver = true;
+        for(let j= 0; j<this.grid.height; j++){
+            for(let i=0; i< this.grid.width; i++){
+                const block = this.grid.getItem(i, j);
+                const parts = block.getDestroyParticles(this.grid);
+                this.particleEngine.addParticles(parts);
+            }
+        }
+        //this.isPaused = true;
+    }
 
     updateBlocks(time:number){
-        //not combo stop game for combo effect
-        const blockTicks = this.blockTickEvent.step(time);
-        if(blockTicks > 0) this.updateGrid(); //only do 1 tick regardless of time spent
+        if(!this.gameOver){
+            //not combo stop game for combo effect
+            const blockTicks = this.blockTickEvent.step(time);
+            if(blockTicks > 0) this.updateGrid(); //only do 1 tick regardless of time spent
 
-        const dropTick = this.dropTickEvent.step(time);
-        if(dropTick > 0){
-            if(this.controlledBlock){ 
-                if(!this.controlledBlock.checkUnderIsBlock(this.grid)){
-                    //this.controlledBlock.isControlling = false;
-                    //this.controlledBlock = null;
-                    const blocks:BlockElement[] = this.controlledBlock.getBlocks();
-                    //console.log(blocks);
-                    for(const block of blocks){
-                        if(this.grid.isInGrid(block.x, block.y)){
-                            this.grid.setGrid(block.x, block.y, block);
-                        }else{
-                            //also game over
-                            console.log('game over');
+            const dropTick = this.dropTickEvent.step(time);
+            if(dropTick > 0){
+                if(this.controlledBlock){ 
+                    if(!this.controlledBlock.checkUnderIsBlock(this.grid)){
+                        //this.controlledBlock.isControlling = false;
+                        //this.controlledBlock = null;
+                        const blocks:BlockElement[] = this.controlledBlock.getBlocks();
+                        //console.log(blocks);
+                        for(const block of blocks){
+                            if(this.grid.isInGrid(block.x, block.y)){
+                                this.grid.setGrid(block.x, block.y, block);
+                            }else{
+                                //also game over
+                                console.log('game over');
+                                this.gameOverFunction()
+                            }
                         }
+                        this.controlledBlock = this.spawnControllingBlock();
+                    }else{
+                        if(!this.controlledBlock.update(this.grid)){
+                            console.log('game over');
+                            this.gameOverFunction()
+                        }
+                        //this.controlledBlock.move(this.grid, 0, 1);
                     }
-                    this.controlledBlock = this.spawnControllingBlock();
-                }else{
-                    if(!this.controlledBlock.update(this.grid)){
-                        console.log('game over');
-                    }
-                    //this.controlledBlock.move(this.grid, 0, 1);
+                    
                 }
-                
             }
         }
 
@@ -319,21 +354,27 @@ export class GameGrid{
         this.animatedTexts.push(...animTexts);
 
         const levelRet = this.levelManager.addPoints(countPoints, 
-            this.controlledBlockGenerator, this.comboChooseInterface, this.comboEngine);
+            this);
         
 
         if(levelRet.levelUp){
-            //level up
-            const levelUpText = CustomText.newAnimatedText(new Point((this.width/2)-20, (this.height/2)-10), 'LEVEL UP!', 'white', 30);
-            levelUpText.maxLifetime = 4000;
-            this.animatedTexts.push(levelUpText);
-            this.comboEngineInterface.newCombos = true;
-            
-            this.blockProbabilityInterface.setData(this.controlledBlockGenerator.blockProbabilities.asList());
-            this.shapeProbabilityInterface.setData(this.controlledBlockGenerator.shapeProbabilities.asList());
+            this.runLevelUp();
         }
 
         this.comboPauseTimer = new TimedEvent(250);
+    }
+    runLevelUp(){
+        const levelUpText = CustomText.newAnimatedText(new Point((this.width/2)-20, (this.height/2)-10), 'LEVEL UP!', 'white', 30);
+        levelUpText.maxLifetime = 4000;
+        this.animatedTexts.push(levelUpText);
+        if(this.comboChooseInterface.needSelected > 0){
+            this.comboEngineInterface.newCombos = true;
+        }else{
+            this.comboEngineInterface.newCombos = false;
+        }
+        
+        this.blockProbabilityInterface.setData(this.controlledBlockGenerator.blockProbabilities.asList());
+        this.shapeProbabilityInterface.setData(this.controlledBlockGenerator.shapeProbabilities.asList());
     }
     update(time:number){
         if(!this.isPaused && !this.comboChooseInterface.active){
@@ -390,6 +431,7 @@ export class GameGrid{
         }
         if(!newBlock){
             console.log('you lost block cannot be placed');
+            this.gameOverFunction()
         }
         return null;
     }
@@ -400,9 +442,96 @@ export class GameGrid{
         }
     }
     mouseMove(e:React.MouseEvent<HTMLCanvasElement>, pos: Point){
+        this.mousePoint = pos;
         if(!this.isPaused) this.mouseHighlightedCell = this.grid.getGridMouseCoordinates(pos);
         if(this.isPaused) this.pauseMenu.mouseMove(pos);
+
+        if(this.abilityManager.activatedAbility !== undefined){
+            this.abilityBarInterface.abilitySlots[this.abilityManager.activatedAbility].overridePt = pos;
+        }//else{
+            //this.abilityBarInterface.abilitySlots[this.abilityManager.activatedAbility].overridePt = undefined;
+        //}
+
+        const screenRect = new VirtRect(0, 0, this.width, this.height);
+        this.abilityBarInterface.mouseOver(pos);
+        
+        if(this.refreshComboInterfaceText(pos)){
+        }else if(this.abilityBarInterface.isInside(pos)){
+            const ability = this.abilityBarInterface.mouseOver(pos);
+            switch(ability){
+                case 0:
+                    this.mouseOverInterface.setTexts(['Drag over grid to destroy block - 1 coin',
+                'OR drag over a combo block to cut combo - 15 coins']);
+                    //this.abilityManager.currentAbility = {id: 1, params: [5], cost: 4};
+                    break;
+                //case 1:
+                 //   break;
+                default:
+                    if(ability !== null){
+                        const id = this.abilityBarInterface.abilitySlots[ability].itemId
+                        this.mouseOverInterface.setTexts(['Transform a grid block to '
+                        +blockTypeStrings[id as BlockId] + ' - 2 coins', 
+                        'OR drag over a combo block', 'to transform to '+blockTypeStrings[id as BlockId] +' - 6 coins']);
+                    }
+                    break;  
+            }
+            if(ability !== null){
+                this.mouseOverInterface.active = true;
+            }else{
+                //ability
+                this.mouseOverInterface.active = false;
+            }
+        }else{
+            this.mouseOverInterface.active = false;
+        }
+        if(this.grid.isInside(pos)){
+            if(this.abilityManager.activatedAbility !== undefined){
+                console.log(this.abilityManager.activatedAbility);
+                if(this.abilityManager.activatedAbility === 0){
+                    if(!this.grid.getGridMouseCell(pos)?.isEmpty){
+                        this.mouseOverInterface.active = true;
+                        this.mouseOverInterface.setTexts(['Destroy Block', '1 Coin']);
+                    }
+                }
+            }
+            else if(this.mouseOverInterface.lock){
+                this.mouseOverInterface.active = true;
+            }
+        }
+        this.mouseOverInterface.mouseMove(pos, screenRect);
+        //this.chosenAbility?.moveTo(pos);
         //this.testRect = this.grid.gridRect.smartMouseRectInside(pos, 50, 30, 30);
+    }
+    refreshComboInterfaceText(pos:Point):boolean{
+        const mOverCombo = this.comboEngineInterface.mouseOver(pos);
+        
+        if(mOverCombo.comboId !== null){
+            if(this.abilityManager.activatedAbility === 0){
+                if(mOverCombo.block){
+                    this.mouseOverInterface.active = true;
+                    this.mouseOverInterface.setTexts(["Spend 15 coins","to cut", "combo block"]);
+                    //this.abilityManager.currentAbility = {id: 0, params: [comboId], cost: 10};
+                }else{
+                    this.mouseOverInterface.active = false;
+                    this.abilityManager.currentAbility = undefined;
+                }
+            }else{
+                //if(mOverCombo.block === null){
+                const comboId = mOverCombo.comboId;
+                if(this.comboEngineInterface.combos[comboId].combo !== null){
+                    this.mouseOverInterface.active = true;
+                    this.mouseOverInterface.setTexts(["Spend 10 coins","to randomise", "block types"]);
+                }else{
+                    this.mouseOverInterface.active = false;
+                    this.abilityManager.currentAbility = undefined;
+                }
+                //}else{
+                    //this.mouseOverInterface.active = false;
+                    //this.abilityManager.currentAbility = undefined;
+                //}
+            }
+        }
+        return mOverCombo.comboId !== null
     }
     mouseLeftDown(e:React.MouseEvent<HTMLCanvasElement>, pos:Point){
         //console.log(pos);
@@ -439,13 +568,87 @@ export class GameGrid{
                 this.comboChooseInterface.changeNeedSelected(1);
             };
         }
-        if(this.abilityBarInterface){
-
+        if(this.abilityBarInterface.isInside(pos)){
+            const ability = this.abilityBarInterface.mouseOver(pos);
+            if(ability !== null){
+                this.abilityManager.activatedAbility = ability;
+            }
         }
-
+        if(this.abilityManager.activatedAbility !== undefined){
+            this.abilityBarInterface.abilitySlots[this.abilityManager.activatedAbility].overridePt = pos;
+        }
     }
     mouseLeftUp(e:React.MouseEvent<HTMLCanvasElement>, pos:Point){
+        //console.log('up');
+        const activated = this.abilityManager.activatedAbility
+        if(activated !== undefined){
+            console.log(activated);
 
+            //destroy block ability // 1 on bar
+            if(activated === 0){
+                const block = this.grid.getGridMouseCell(pos);
+                if(block && !block.isEmpty){
+                    //console.log(block);
+                    this.abilityManager.currentAbility = {id: 1, params: [{x: block.x, y:block.y}], cost: 1};
+                }
+                else{
+                    const comboBlock = this.comboEngineInterface.mouseOver(pos);
+                    if(comboBlock.comboId !== null && comboBlock.blockIndex !== undefined){
+                        if(this.comboEngineInterface.combos[comboBlock.comboId].combo){
+                            const len = this.comboEngineInterface.combos[comboBlock.comboId].combo?.blocks.length;
+                            if(len !== undefined && len >= 4){
+                                if(comboBlock.block) this.abilityManager.currentAbility = {
+                                    id: 2, 
+                                    params: [this.comboEngineInterface.combos[comboBlock.comboId].combo, comboBlock.blockIndex], 
+                                    cost: 15
+                                };
+                            }
+                            else{
+                                this.mouseOverInterface.setTexts(['Shape already too small']);
+                                this.mouseOverInterface.setLock();
+                                this.abilityManager.currentAbility = undefined;
+                            }
+                        }
+                    }
+                    //if(this.comboEngineInterface.combos[comboBlock.comboId])
+                    //if(comboBlock.block) this.abilityManager.currentAbility = {id: 2, params: [comboId, comboBlock], cost: 10};
+                }
+            }else{
+                //console.log(activated);
+                //console.log(this.abilityBarInterface.abilitySlots[activated]);
+                const type = this.abilityBarInterface.abilitySlots[activated].itemId;
+                const block = this.grid.getGridMouseCell(pos);
+                if(block && !block.isEmpty){
+                    if(block.type === type){
+                        this.mouseOverInterface.setTexts(['Same type']);
+                        this.mouseOverInterface.setLock();
+                        this.abilityManager.currentAbility = undefined;
+                    }else this.abilityManager.currentAbility = {id:3, params: [type, block, this.grid], cost: 2};
+                }else{
+                    //drop on combo block
+                    const comboBlock = this.comboEngineInterface.mouseOver(pos);
+                    if(comboBlock.block){
+                        this.abilityManager.currentAbility = {id:4, params: [type, comboBlock.block], cost: 5};
+                    }
+                }
+                //const comboId = mOverCombo.comboId;
+            }
+            this.abilityBarInterface.abilitySlots[activated].overridePt = undefined;
+        }else{
+            //no ability needed
+            const mOverCombo = this.comboEngineInterface.mouseOver(pos);
+            if(mOverCombo.comboId !== null){
+                this.abilityManager.currentAbility = {id: 0, params: [mOverCombo.comboId], cost: 10};
+            }
+            //this.abilityManager.currentAbility = undefined;
+        }
+
+
+        this.abilityManager.run(this);
+        this.abilityManager.currentAbility = undefined;
+        this.abilityManager.activatedAbility = undefined;
+        const screenRect = new VirtRect(0, 0, this.width, this.height);
+        this.mouseOverInterface.mouseMove(pos, screenRect);
     }
     mouseRightDown(e:React.MouseEvent<HTMLCanvasElement>, pos:Point){
         //const block = generateDroppingBlockFromId(this.blockPickInterface.picked);
@@ -459,7 +662,8 @@ export class GameGrid{
 
     }
     keyDown(e:KeyboardEvent, key:string){
-        console.log(key);
+        //console.log(key);
+        key = key.toLowerCase();
         switch(key){
             case 'a':
                 this.blockMoveLeft();
@@ -477,6 +681,7 @@ export class GameGrid{
                 this.controlledBlock?.rotateAntiClockwise(this.grid);
                 break;
             case 'z':
+
                 //adds random combo
                 /*
                 const combo = BlockCombos.generateCombo(this.controlledBlockGenerator.blockProbabilities);
@@ -490,16 +695,59 @@ export class GameGrid{
                 //this.comboEngine.
                 break;
             case ' ':
-                this.updateGrid();
-                console.log('update grid');
+                //this.updateGrid();
+                //console.log('update grid');
+                //this.levelManager.addPoints(100, this);
+                //this.runLevelUp();
                 break;
-            case 'Escape':
+            case 'escape':
                 //console.log('escape');
                 this.isPaused = !this.isPaused;
+                break;
+            case '1':
+                if(this.abilityManager.activatedAbility === 0){
+                    this.abilityBarInterface.abilitySlots[this.abilityManager.activatedAbility].overridePt = undefined;
+                    this.abilityManager.activatedAbility = undefined;
+                }else{
+                    this.abilityManager.activatedAbility = 0;
+                    this.abilityBarInterface.abilitySlots[this.abilityManager.activatedAbility].overridePt = this.mousePoint;
+                }
+                this.refreshComboInterfaceText(this.mousePoint);
+                break;
+            case '2':
+                if(this.abilityManager.activatedAbility === 1){
+                    this.abilityBarInterface.abilitySlots[this.abilityManager.activatedAbility].overridePt = undefined;
+                    this.abilityManager.activatedAbility = undefined;
+                }else{
+                    this.abilityManager.activatedAbility = 1;
+                    this.abilityBarInterface.abilitySlots[this.abilityManager.activatedAbility].overridePt = this.mousePoint;
+                }
+                this.refreshComboInterfaceText(this.mousePoint);
+                break;
+            case '3':
+                if(this.abilityManager.activatedAbility === 2){
+                    this.abilityBarInterface.abilitySlots[this.abilityManager.activatedAbility].overridePt = undefined;
+                    this.abilityManager.activatedAbility = undefined;
+                }else{
+                    this.abilityManager.activatedAbility = 2;
+                    this.abilityBarInterface.abilitySlots[this.abilityManager.activatedAbility].overridePt = this.mousePoint;
+                }
+                this.refreshComboInterfaceText(this.mousePoint);
+                break;
+            case '4':
+                if(this.abilityManager.activatedAbility === 3){
+                    this.abilityBarInterface.abilitySlots[this.abilityManager.activatedAbility].overridePt = undefined;
+                    this.abilityManager.activatedAbility = undefined;
+                }else{
+                    this.abilityManager.activatedAbility = 3;
+                    this.abilityBarInterface.abilitySlots[this.abilityManager.activatedAbility].overridePt = this.mousePoint;
+                }
+                this.refreshComboInterfaceText(this.mousePoint);
                 break;
         }
     }
     keyUp(e:KeyboardEvent, key:string){
+        key = key.toLowerCase();
         switch(key){
             case 's':
                 this.dropTickEvent.interval = this.dropTickTime;
@@ -557,16 +805,27 @@ export class GameGrid{
     }
 
     draw(cr:CanvasRenderingContext2D):void{
-        cr.translate(this.screenShake.x, this.screenShake.y);
 
-        cr.fillStyle = 'black';
+        drawBackground(cr, this.width, this.height);
+
+        cr.translate(this.screenShake.x, this.screenShake.y);
+        cr.fillStyle = 'black'
+        cr.fillRect(10, 10, 240, 75)
+        cr.fillStyle = 'white';
         cr.fillText('Points: '+this.levelManager.points, 20, 25);
         cr.fillText('Level: '+this.levelManager.level, 20, 50);
         cr.fillText('Coins: '+this.levelManager.coins, 20, 75);
 
         cr.fillStyle = 'black';
         this.spawnArea.fill(cr);
-        this.grid.draw(cr);
+        if(!this.gameOver){
+            this.grid.drawBG(cr);
+            this.grid.drawGrid(cr);
+            this.grid.drawBlocks(cr);
+        }else{
+            const text = new DrawText('GAME OVER!', new Point(this.width/2, this.height/2), 20, undefined, 'white');
+            text.drawCentre(cr);
+        }
 
         //draw outline
         if(this.controlledBlock){
@@ -604,12 +863,15 @@ export class GameGrid{
         //this.comboEngine.drawCombos(cr, (this.width/2)+(this.grid.getDrawWidth()/2)+10, 
         //this.grid.position.y+300);
         this.comboEngineInterface.draw(cr);
+        this.abilityBarInterface.drawItems(cr, this.abilityManager.activatedAbility);
+        //this.chosenAbility?.drawItem(cr, );
         
         CustomText.drawAnimatedTexts(cr, this.animatedTexts);
 
-        this.shopInterface.draw(cr);
+        //this.shopInterface.draw(cr);
 
         this.comboChooseInterface.draw(cr, this.width, this.height);
+        this.mouseOverInterface.draw(cr);
         //console.log(this.comboChooseInterface.active = );
 
         cr.resetTransform();

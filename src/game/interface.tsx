@@ -1,7 +1,8 @@
 import { Point } from "../geometry/geometry";
 import { VirtRect } from "../geometry/shapes";
-import { DrawText } from "../graphics/text";
+import { DrawText, TextLines } from "../graphics/text";
 import { ProbabilityItem } from "../math/Random";
+import { RandomBlockGenerator } from "./blockchain";
 import { BlockElement, BlockId, DroppingBlock, StoneBlock, blockSize, blockTypeStrings, generateBlockFromId } from "./blocks";
 import { BlockComboEngine } from "./combo";
 import { BlockCombos } from "./customCombos";
@@ -99,9 +100,9 @@ export class BlockInfo{
         const p = new Point(info.x, info.y);
         this.coordinate.text = p.toString();
         const typeString:string = blockTypeStrings[info.type as BlockId];
-        this.typeInfo.text = 'Type: ' + typeString;
-        this.isDroppingInfo.text = 'Dropping: ' + info.isDropping;
-        this.isEmptyInfo.text = 'Empty: ' + info.isEmpty;
+        this.typeInfo.text = 'Block Type: ' + (typeString === 'Default' ? 'Nothing!' : typeString);
+        this.isDroppingInfo.text = 'Floats: ' + info.isFloating;
+        this.isEmptyInfo.text = 'Sandy: ' + info.isSand;
     }
     noInfo(){
         this.coordinate.text = '';
@@ -113,7 +114,7 @@ export class BlockInfo{
         cr.fillStyle = 'black';
         this.box.fill(cr);
         this.box.draw(cr);
-        this.coordinate.draw(cr);
+        //this.coordinate.draw(cr);
         this.typeInfo.draw(cr);
         this.isDroppingInfo.draw(cr);
         this.isEmptyInfo.draw(cr);
@@ -188,6 +189,14 @@ export class DisplayCombo{
         this.size = size;
         this.rect = new VirtRect(x, y, size*4, size*4);
     }
+    randomise(rbg:RandomBlockGenerator){
+        //this.combo?.blocks.
+        console.log('randomise');
+        if(this.combo){
+            for(const block of this.combo.blocks)
+                block.id = rbg.randomBlockType();
+        }
+    }
     isInside(pos:Point){
         return this.rect.hitPoint(pos);
     }
@@ -201,31 +210,34 @@ export class DisplayCombo{
             const block = this.getComboBlock(pos);
         }
     }
-    getComboBlock(pos:Point): BlockCombos.CBlock | null{
+    getComboBlock(pos:Point): {block: BlockCombos.CBlock | null, index?:number}{
         if(this.combo){
             const cx = this.rect.cx-((this.combo.range.maxX+1)/2)*this.size;
             const cy = this.rect.cy-((this.combo.range.maxY+1)/2)*this.size;
             const relativePt = new Point(pos.x - cx, pos.y - cy);
             const x = Math.floor(relativePt.x / this.size);
             const y = Math.floor(relativePt.y / this.size);
+            let n = undefined;
             const found:BlockCombos.CBlock | null = this.combo.blocks.reduce
-            ((f:BlockCombos.CBlock | null, block:BlockCombos.CBlock) => {
-                if(block.x === x && block.y === y) return block;
+            ((f:BlockCombos.CBlock | null, block:BlockCombos.CBlock, i:number) => {
+                if(block.x === x && block.y === y){
+                    n = i;
+                    return block;
+                }
                 return f;
             }, null)
 
-            return found;
+            return {block: found, index: n};
         }
-        return null;
+        return {block: null, index: undefined};
     }
     draw(cr:CanvasRenderingContext2D){
-        cr.fillStyle = 'white';
+        cr.fillStyle = 'grey';
         this.rect.fill(cr);
         if(this.combo){
             const x = this.rect.cx-((this.combo.range.maxX+1)/2)*this.size;
             const y = this.rect.cy-((this.combo.range.maxY+1)/2)*this.size;
             BlockCombos.drawCombo(cr, this.combo.blocks, this.size, x, y);
-
         }
     }
 }
@@ -250,6 +262,8 @@ export class ComboEngineInterface extends InterfaceBox{
 
     nonTicks: number;
 
+    mousedItem: number | null;
+
     constructor(bce: BlockComboEngine){
         super(new Point(), 200, 350);
         this.engine = bce;
@@ -267,6 +281,19 @@ export class ComboEngineInterface extends InterfaceBox{
         //start at 20
         this.combos = [];
         this.comboIndex = 0;
+        let cy = this.box.top+44;
+        const size = 24;
+        for(let j=0; j<3; j++){
+            let cx = this.box.left+3;
+            for(let i=0; i<2; i++){
+                this.combos.push(new DisplayCombo(null, cx, cy, size));
+                cx += size*4+1;
+            }
+            cy += size*4+4;
+        }
+        //console.log(this.combos);
+
+        this.mousedItem = null;
 
     }
     addCombo(blockCombo:BlockCombos.BlockComboBlocks){
@@ -283,21 +310,45 @@ export class ComboEngineInterface extends InterfaceBox{
         this.pickComboText.textPoint = new Point(pt.x+10+
             (this.pickComboButton.width/2), 
             pt.y+(this.pickComboButton.height/2));
-
-        this.combos = [];
-        //let cx = pt.x+4;
+        
+        //console.log(this.combos);d
         let cy = pt.y+44;
         const size = 24;
         for(let j=0; j<3; j++){
             let cx = pt.x+3;
             for(let i=0; i<2; i++){
-                this.combos.push(new DisplayCombo(null, cx, cy, size));
+                if((i)+(j*2) < this.combos.length){
+                    this.combos[(i)+(j*2)].rect.moveTo(new Point(cx, cy));
+                }
+                //this.combos[i*j].x = cx;
+                //this.combos[i*j].y = cy;
                 cx += size*4+1;
             }
             cy += size*4+4;
         }
     }
+    mouseOver(pos:Point)
+    :{comboId: number|null, block:BlockCombos.CBlock | null, blockIndex?: number}{
+        const mousedItem:number|null = 
+        this.combos.reduce((i:number|null, c, id) => {
+            if(c.isInside(pos)) return id;
+            return i;
+        }, null);
+        let block = null
+        if(mousedItem !== null){
+            const b = this.combos[mousedItem].getComboBlock(pos);
+            block = b;
+        }
+        //console.log(mousedItem);
+        this.mousedItem = mousedItem;
+        //console.log(mousedItem);
+        if (block) return {comboId: mousedItem, block: block.block, blockIndex: block.index};
 
+        return {comboId: mousedItem, block: null, blockIndex: undefined}
+    }
+    mouseUp(){
+
+    }
     isClicked(pos:Point):ComboEngineClickReturn{
         if(this.box.hitPoint(pos)){
             const relPoint = new Point(pos.x-this.box.left, pos.y-this.box.top);
@@ -626,14 +677,110 @@ export class ComboChooseInterface extends InterfaceBox{
     }
 }
 
-export class AbilityInterface extends InterfaceBox{
-    constructor(pt:Point){
-        super(pt, 500, 100);
+
+
+export class AbilityItem extends InterfaceBox{
+    itemId: number;
+    overridePt: Point | undefined
+    constructor(id:number, pt?:Point,){
+        super(new Point(), 50, 50);
+        this.itemId = id;
+        this.overridePt = undefined;
+    }
+    moveTo(pt:Point){
+        super.moveTo(pt);
+    }
+    drawItem(cr:CanvasRenderingContext2D, isMini:boolean=true){
+        const tr = cr.getTransform();
+        if(isMini){
+            //cr.translate(-this.box.left, -this.box.right);
+            //cr.translate(this.box.left, this.box.right)
+            const ox = this.overridePt !== undefined ? this.overridePt.x : this.box.left;
+            const oy = this.overridePt !== undefined ? this.overridePt.y : this.box.top;
+            const scale = 0.3;
+            cr.scale(scale, scale);
+            const x = (ox-(this.box.width*scale*0.5))*(1/scale);
+            const y = (oy-(this.box.height*scale*0.5))*(1/scale);
+            cr.translate(x, y);
+        }else{
+            cr.translate(this.box.left, this.box.top)
+        }
+        cr.fillStyle = 'black';
+        cr.fillRect(0, 0, this.box.width, this.box.height);
+        if(this.itemId == -1){
+            const dt = new DrawText('X', new Point(this.box.cx-this.box.left, this.box.cy-this.box.top-10), 
+            50, undefined, 'white');
+            dt.drawCentre(cr);
+        }else{
+            const block = generateBlockFromId(this.itemId);
+            block.draw(cr, 50, new Point(0, 0));
+        }
+
+        cr.setTransform(tr);
     }
 }
 
+export class AbilityInterface extends InterfaceBox{
+    abilitySlots: AbilityItem[];
+    constructor(pt?:Point){
+        super(new Point(), 600, 100);
+        this.abilitySlots = [new AbilityItem(-1)]
+    }
+    addAbility(id:number){
+        const ability =  new AbilityItem(id);
+        this.abilitySlots.push(ability);
+        this.moveTo(new Point(this.box.left, this.box.top));
+    }
+    mouseOver(pt:Point):number | null{
+        if(this.box.hitPoint(pt)){
+            for(let i = 0; i<this.abilitySlots.length; ++i){
+                if(this.abilitySlots[i].isInside(pt)){
+                    return i;
+                };
+            }
+            return null;
+        }
+        return null;
+    }
+    mouseDown(pt:Point){
+        if(this.box.hitPoint(pt)){
+
+        }
+    }
+    keyDown(){
+
+    }
+    moveTo(pt:Point){
+        super.moveTo(pt);
+        let x = this.box.left;
+        for(let i = 0; i<this.abilitySlots.length; ++i){
+            this.abilitySlots[i].box.moveTo(new Point(x, pt.y));
+            x += this.abilitySlots[i].box.width;
+        }
+        //console.log(pt);
+    }
+    drawItems(cr:CanvasRenderingContext2D, miniId: number | undefined){
+        //super.draw(cr);
+        let i = 0;
+        for(const ability of this.abilitySlots){
+            //console.log(ability);
+            const isMini = i === miniId;
+            i++;
+            ability.drawItem(cr, isMini);
+            const dt = new DrawText(i.toString(), new Point(ability.box.left, ability.box.bottom+20), 
+            15, undefined, 'black');
+            
+            dt.draw(cr);
+        }
+        
+    }
+}
+
+
+
 export class ShopInterface extends InterfaceBox {
     title:DrawText;
+    //items:ShopItem;
     constructor(pt?:Point){
         super(new Point(), 220, 140);
         this.title = new DrawText('SHOP', new Point(), 15, undefined, 'white')
@@ -654,6 +801,54 @@ export class ShopInterface extends InterfaceBox {
 }
 
 export class MouseOverInterface extends InterfaceBox {
+    active: boolean;
+    texts: TextLines;
+    //width: number;
+    lock: boolean;
+
+    constructor(){
+        super(new Point(), 200, 0);
+        this.active = false;
+        this.texts = new TextLines(new Point(), 15);
+        this.lock = false;
+        //new DrawText('', new Point(), 15, undefined, 'white');
+        //this.text.maxWidth = this.box.width;
+    }
+    setLock(){
+        this.lock = true;
+        setTimeout(() => {
+            this.lock = false;
+        }, 800);
+    }
+    setTexts(t:string[]){
+        if(!this.lock){
+            this.texts.texts = t;
+            this.box.height = t.length*this.texts.size+10;
+        }
+        //this.box.height = t.length*this.texts.size+10;
+    }
+    mouseMove(pos:Point, screenRect: VirtRect){
+        this.box = screenRect.smartMouseRectInside(pos, 50, this.box.width, this.box.height);
+        this.texts.textPoint = new Point(this.box.left, this.box.top+15);
+    }
+    moveTo(pt:Point){
+        super.moveTo(pt);
+        //for(let i = 0; i<this.texts; i<)
+        //this.texts = 
+        this.texts.textPoint = new Point(this.box.left, this.box.top)
+    }
+    draw(cr:CanvasRenderingContext2D){
+        if(this.active){
+            const wid = this.texts.getMaxWidth(cr)+5;
+            this.box.changeDimensions(wid, this.box.height);
+            cr.fillStyle = 'black';
+            this.box.fill(cr);
+
+            cr.strokeStyle = 'white';
+            this.box.draw(cr);
+            this.texts.draw(cr);
+        }
+    }
 
 }
 

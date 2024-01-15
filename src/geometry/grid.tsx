@@ -120,6 +120,9 @@ export class DrawGrid2D<Type extends Coordinate2DType> extends VirtualCoordinate
         this.position = pt;
         this.gridRect.moveTo(pt);
     }
+    isInside(pt: Point){
+        return this.gridRect.hitPoint(pt);
+    }
     getDrawWidth():number{
        return this.gridSize*this.width; 
     }
@@ -216,6 +219,7 @@ export class DrawGrid2D<Type extends Coordinate2DType> extends VirtualCoordinate
     }
 
     drawGrid(cr:CanvasRenderingContext2D):void{
+        cr.strokeStyle = 'grey';
         const gridWidth = this.gridRect.width;
         const gridHeight = this.gridRect.height;
         if(this.showGridLines){
@@ -246,6 +250,14 @@ export class DrawGrid2D<Type extends Coordinate2DType> extends VirtualCoordinate
                 item.draw(cr, this.gridSize, this.getGridPosition(x, y));
             }
         }
+    }
+
+    drawBG(cr:CanvasRenderingContext2D){
+        const gridWidth = this.width*this.gridSize;
+        const gridHeight = this.height*this.gridSize;
+        cr.fillStyle = 'black';
+        cr.fillRect(this.position.x, this.position.y, 
+            gridWidth, gridHeight);
     }
 
     draw(cr:CanvasRenderingContext2D):void{

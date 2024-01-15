@@ -1,4 +1,5 @@
 import { CanvasScreenManager } from "../Canvas/Screen";
+import { drawBackground } from "./background";
 import { GameCanvas, GameGrid } from "./game";
 import { GameMenu } from "./menu";
 
@@ -8,7 +9,7 @@ export class GameMain extends CanvasScreenManager{
     menu: GameMenu;
     constructor(){
         super();
-        this.currentScreen = 0;
+        this.currentScreen = 1;
         this.game = new GameCanvas();
         this.menu = new GameMenu();
 
@@ -28,6 +29,9 @@ export class GameMain extends CanvasScreenManager{
     update(time:number){
         if(this.currentScreen == 0) this.game.update(time);
         else this.menu.update(time);
+    }
+    draw(cr:CanvasRenderingContext2D){
+        super.draw(cr);
     }
     //resize(winX: number, winY: number): void {
     //    this.width = winX; this.height = winY;

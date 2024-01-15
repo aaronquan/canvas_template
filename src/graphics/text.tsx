@@ -17,11 +17,13 @@ class BaseText{
 
 export class DrawText extends BaseText{
     textPoint: Point;
+    maxWidth: number | undefined;
     //colour: string;
     constructor(text:string, bl:Point, size?:number, font?:string, colour?:string){
         super(text, size, font, colour);
         this.textPoint = bl; 
         this.colour = colour ? colour : 'white';
+        this.maxWidth = undefined;
     }
     draw(cr:CanvasRenderingContext2D):void{
         cr.font = this.size.toString()+'px '+this.font;
@@ -35,7 +37,49 @@ export class DrawText extends BaseText{
         const x = this.textPoint.x - (metrics.width/2);
         const y = this.textPoint.y + (this.size/2);
         cr.fillStyle = this.colour;
-        cr.fillText(this.text, x, y);
+        cr.fillText(this.text, x, y, this.maxWidth);
+    }
+}
+
+export class TextLines{
+    textPoint: Point;
+    texts: string[];
+    font: string;
+    size: number; //in px
+    colour: string;
+    constructor( bl:Point, size:number=15, font?:string, colour?:string){
+        //super(text, size, font, colour);
+        this.textPoint = bl; 
+        this.size = size;
+        this.font = font ? font : 'Courier New';
+        this.colour = colour ? colour : 'white';
+        this.texts = [];
+    }
+    moveTo(pt: Point){
+        this.textPoint = pt;
+    }
+    getMaxWidth(cr:CanvasRenderingContext2D):number{
+        cr.font = this.size.toString()+'px '+this.font;
+        let max = 0;
+        for(let i = 0; i < this.texts.length; ++i){
+            const r = cr.measureText(this.texts[i]);
+            if(r.width > max){
+                max = r.width;
+            }
+        }
+        return max;
+    }
+    draw(cr:CanvasRenderingContext2D):void{
+        
+        if(this.texts.length > 0){
+            cr.font = this.size.toString()+'px '+this.font;
+            cr.fillStyle = this.colour;
+            let y = this.textPoint.y;
+            for(let i=0; i< this.texts.length; i++){
+                cr.fillText(this.texts[i], this.textPoint.x, y);
+                y+= this.size + 3
+            }
+        }
     }
 }
 
